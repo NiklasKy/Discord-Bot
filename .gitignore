@@ -16,6 +16,5 @@ venv/
 .idea/
 
 # Output files
-current_players.txt
 discord_usernames.txt
-discord_members_full.txt 
+current_players.txt

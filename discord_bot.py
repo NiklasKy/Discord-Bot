@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import asyncio
 from config import TOKEN  # Import the token from config.py
+import os
 
 class MemberBot(commands.Bot):
     def __init__(self):
@@ -32,7 +33,7 @@ bot = MemberBot()
 @bot.command(name='getmembers')
 async def get_members(ctx, *, role_name: str = None):
     """
-    Lists all members with a specific role
+    Lists all members with a specific role and saves their names in separate files
     Usage: !getmembers rolename
     """
     try:
@@ -48,40 +49,40 @@ async def get_members(ctx, *, role_name: str = None):
             await ctx.send(f"Available roles: {', '.join(roles)}")
             return
 
-        # Create list of members with their global names
+        # Create lists for different name types
         members_info = []
         for member in role.members:
-            global_name = member.global_name if member.global_name else member.name
+            display_name = member.nick if member.nick else (member.global_name if member.global_name else None)
+            
             members_info.append({
                 'username': member.name,
-                'global_name': global_name
+                'display_name': display_name
             })
         
-        # Sort by global name
-        members_info.sort(key=lambda x: x['global_name'].lower())
-
-        # Save global names to current_players.txt
-        with open('current_players.txt', 'w', encoding='utf-8') as f:
-            for member in members_info:
-                f.write(f"{member['global_name']}\n")
+        # Sort by username
+        members_info.sort(key=lambda x: x['username'].lower())
 
         # Save usernames to discord_usernames.txt
         with open('discord_usernames.txt', 'w', encoding='utf-8') as f:
             for member in members_info:
                 f.write(f"{member['username']}\n")
 
-        # Save full info to discord_members_full.txt
-        with open('discord_members_full.txt', 'w', encoding='utf-8') as f:
+        # Save display/global names to current_players.txt
+        with open('current_players.txt', 'w', encoding='utf-8') as f:
             for member in members_info:
-                f.write(f"{member['global_name']} ({member['username']})\n")
+                if member['display_name']:  # Only write if there is a display name
+                    f.write(f"{member['display_name']}\n")
 
         # Create formatted message
-        message = f"**Members with role {role_name} ({len(members_info)}):**\n"
+        message = f"**Members with role {role_name} ({len(members_info)}):**\n\n"
+        message += "**Discord Usernames:**\n"
         for member in members_info:
-            if member['username'] != member['global_name']:
-                message += f"{member['global_name']} ({member['username']})\n"
-            else:
-                message += f"{member['username']}\n"
+            message += f"{member['username']}\n"
+        
+        message += "\n**Display/Global Names:**\n"
+        for member in members_info:
+            if member['display_name']:
+                message += f"{member['display_name']}\n"
 
         # Send message (split if too long)
         if len(message) > 2000:
@@ -92,9 +93,8 @@ async def get_members(ctx, *, role_name: str = None):
             await ctx.send(message)
 
         await ctx.send(f"""Files have been saved:
-- 'current_players.txt' (Global names only)
-- 'discord_usernames.txt' (Discord usernames only)
-- 'discord_members_full.txt' (Full information)""")
+- 'discord_usernames.txt' (Discord usernames)
+- 'current_players.txt' (Server nicknames or global names)""")
 
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
