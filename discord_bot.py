@@ -18,13 +18,23 @@ class MemberBot(commands.Bot):
 
     async def setup_hook(self):
         print(f'Bot is logged in as {self.user}')
-        await self.tree.sync()  # Sync slash commands
+        try:
+            synced = await self.tree.sync()
+            print(f"Synced {len(synced)} command(s)")
+        except Exception as e:
+            print(f"Error syncing commands: {e}")
 
     async def on_ready(self):
         print(f'Bot is ready! Logged in as {self.user}')
         print(f'Bot is in the following servers:')
         for guild in self.guilds:
             print(f'- {guild.name} (id: {guild.id})')
+            try:
+                # Sync commands for each guild
+                await self.tree.sync(guild=guild)
+                print(f"  Commands synced for {guild.name}")
+            except Exception as e:
+                print(f"  Error syncing commands for {guild.name}: {e}")
 
 bot = MemberBot()
 
