@@ -75,9 +75,6 @@ async def get_members(ctx, *, role_name: str = None):
 
         # Create formatted message
         message = f"**Members with role {role_name} ({len(members_info)}):**\n\n"
-        message += "**Discord Usernames:**\n"
-        for member in members_info:
-            message += f"{member['username']}\n"
         
         message += "\n**Display/Global Names:**\n"
         for member in members_info:
