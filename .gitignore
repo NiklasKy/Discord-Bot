@@ -18,3 +18,4 @@ venv/
 # Output files
 discord_usernames.txt
 current_players.txt
+read_players.py

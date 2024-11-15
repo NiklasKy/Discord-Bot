@@ -3,6 +3,8 @@ from discord.ext import commands
 import asyncio
 from config import TOKEN  # Import the token from config.py
 import os
+import json
+import aiohttp  # Für asynchrones Laden der JSON-Daten
 
 class MemberBot(commands.Bot):
     def __init__(self):
@@ -30,16 +32,30 @@ class MemberBot(commands.Bot):
 
 bot = MemberBot()
 
+def clean_name(name):
+    # Removes spaces and converts to lowercase for better comparison
+    return name.replace(" ", "").lower()
+
 @bot.command(name='getmembers')
-async def get_members(ctx, *, role_name: str = None):
+async def get_members(ctx, *, args=None):
     """
-    Lists all members with a specific role and saves their names in separate files
-    Usage: !getmembers rolename
+    Lists members with a specific role that are not in the JSON data
+    Usage: !getmembers "Role Name" [json_url]
     """
     try:
-        if role_name is None:
-            await ctx.send("Please provide a role name! Example: !getmembers Player")
+        if not args:
+            await ctx.send('Please provide a role name! Example: !getmembers "Role Name" [json_url]')
             return
+
+        # Split args into role_name and optional json_url
+        args_split = args.split('" ')
+        if args.startswith('"'):
+            role_name = args_split[0][1:]  # Remove starting quote
+            json_url = args_split[1] if len(args_split) > 1 else None
+        else:
+            args_split = args.split(' ')
+            role_name = args_split[0]
+            json_url = args_split[1] if len(args_split) > 1 else None
 
         role = discord.utils.get(ctx.guild.roles, name=role_name)
         
@@ -62,24 +78,74 @@ async def get_members(ctx, *, role_name: str = None):
         # Sort by username
         members_info.sort(key=lambda x: x['username'].lower())
 
-        # Save usernames to discord_usernames.txt
+        # Save all discord members first
         with open('discord_usernames.txt', 'w', encoding='utf-8') as f:
             for member in members_info:
                 f.write(f"{member['username']}\n")
 
-        # Save display/global names to current_players.txt
         with open('current_players.txt', 'w', encoding='utf-8') as f:
             for member in members_info:
-                if member['display_name']:  # Only write if there is a display name
+                if member['display_name']:
                     f.write(f"{member['display_name']}\n")
 
-        # Create formatted message
-        message = f"**Members with role {role_name} ({len(members_info)}):**\n\n"
-        
-        message += "\n**Display/Global Names:**\n"
-        for member in members_info:
-            if member['display_name']:
-                message += f"{member['display_name']}\n"
+        # If JSON URL is provided, compare members
+        if json_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(json_url) as response:
+                        if response.status == 200:
+                            json_data = await response.json()
+                            
+                            # Get signed up players from JSON
+                            signed_up_players = []
+                            original_names = {}
+                            
+                            if 'signUps' in json_data:
+                                for player in json_data['signUps']:
+                                    if 'name' in player:
+                                        cleaned_name = clean_name(player['name'])
+                                        signed_up_players.append(cleaned_name)
+                                        original_names[cleaned_name] = player['name']
+
+                            # Get current discord players (using display names)
+                            current_players = [
+                                clean_name(member['display_name'])
+                                for member in members_info
+                                if member['display_name']
+                            ]
+
+                            # Find players not signed up
+                            not_signed_up = [
+                                member for member in members_info
+                                if member['display_name'] and 
+                                clean_name(member['display_name']) not in signed_up_players
+                            ]
+
+                            # Create message with statistics
+                            message = f"**Comparison Results for '{role_name}':**\n\n"
+                            
+                            if not_signed_up:
+                                message += "**Not Signed Up Players:**\n"
+                                for member in not_signed_up:
+                                    message += f"{member['display_name']} ({member['username']})\n"
+                            else:
+                                message += "All players are signed up! 🎉\n"
+
+                            message += f"\n**Statistics:**\n"
+                            message += f"Signed up: {len(signed_up_players)}\n"
+                            message += f"Not signed up: {len(not_signed_up)}\n"
+                            message += f"Total Discord members: {len(current_players)}\n"
+
+                        else:
+                            message = f"Error loading JSON data: HTTP {response.status}"
+            except Exception as e:
+                message = f"Error processing JSON data: {str(e)}"
+        else:
+            # If no JSON URL, show all members
+            message = f"**All members with role {role_name} ({len(members_info)}):**\n\n"
+            for member in members_info:
+                if member['display_name']:
+                    message += f"{member['display_name']} ({member['username']})\n"
 
         # Send message (split if too long)
         if len(message) > 2000:
@@ -88,10 +154,6 @@ async def get_members(ctx, *, role_name: str = None):
                 await ctx.send(chunk)
         else:
             await ctx.send(message)
-
-        await ctx.send(f"""Files have been saved:
-- 'discord_usernames.txt' (Discord usernames)
-- 'current_players.txt' (Server nicknames or global names)""")
 
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
@@ -139,7 +201,6 @@ async def list_roles(ctx):
 async def info_command(ctx):
     """Shows information about the bot and available commands"""
     try:
-        # Get bot information
         bot_member = ctx.guild.get_member(bot.user.id)
         bot_roles = [role.name for role in bot_member.roles if role.name != "@everyone"]
         
@@ -151,18 +212,14 @@ Server: {ctx.guild.name}
 Bot Roles: {', '.join(bot_roles)}
 
 **Available Commands:**
-`!getmembers rolename` - Shows all members with the specified role
+`!getmembers "Role Name" [json_url]` - Shows all members with the specified role and compares with JSON data if URL provided
 `!listroles` - Shows all available roles on the server
 `!info` - Shows this information message
 
 **Examples:**
-`!getmembers Player` - Lists all members with the 'Player' role
+`!getmembers "Minecraft Player"` - Lists all members with the 'Minecraft Player' role
+`!getmembers "Discord Admin" https://example.com/data.json` - Lists members and compares with JSON data
 `!listroles` - Shows detailed information about all roles
-
-**Files Created:**
-• current_players.txt - Contains global names
-• discord_usernames.txt - Contains Discord usernames
-• discord_members_full.txt - Contains both names
         """
         await ctx.send(info_text)
 
