@@ -88,71 +88,66 @@ async def get_members(interaction: discord.Interaction, role: discord.Role):
         else:
             await interaction.followup.send(f"An error occurred: {str(e)}")
 
-@bot.tree.command(name="checksignups", description="Compares role members with JSON signup data")
+@bot.tree.command(name="checksignups", description="Compares role members with Raid-Helper signups")
 @app_commands.describe(
     role="The role to check members for",
-    json_url="URL to JSON file for comparison"
+    event_id="The Raid-Helper event ID"
 )
-async def check_signups(interaction: discord.Interaction, role: discord.Role, json_url: str):
+async def checksignups(interaction: discord.Interaction, role: discord.Role, event_id: str):
     try:
         await interaction.response.defer()
 
-        # Create lists for different name types
-        members_info = []
+        # Get all members with their IDs from the role
+        role_members = {}
         for member in role.members:
-            display_name = member.nick if member.nick else (member.global_name if member.global_name else None)
-            
-            members_info.append({
-                'username': member.name,
-                'display_name': display_name
-            })
+            display_name = member.nick if member.nick else (member.global_name if member.global_name else member.name)
+            role_members[str(member.id)] = display_name
+
+        # Construct Raid-Helper API URL
+        api_url = f"https://raid-helper.dev/api/v2/events/{event_id}"
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(json_url) as response:
+                async with session.get(api_url) as response:
                     if response.status == 200:
-                        json_data = await response.json()
+                        event_data = await response.json()
                         
-                        signed_up_players = []
-                        original_names = {}
-                        
-                        if 'signUps' in json_data:
-                            for player in json_data['signUps']:
-                                if 'name' in player:
-                                    cleaned_name = clean_name(player['name'])
-                                    signed_up_players.append(cleaned_name)
-                                    original_names[cleaned_name] = player['name']
+                        # Get signed up player IDs from Raid-Helper
+                        signed_up_ids = set()
+                        if 'signUps' in event_data:
+                            for signup in event_data['signUps']:
+                                if 'userId' in signup:
+                                    signed_up_ids.add(str(signup['userId']))
 
-                        current_players = [
-                            clean_name(member['display_name'])
-                            for member in members_info
-                            if member['display_name']
-                        ]
+                        # Find members who haven't signed up by comparing IDs
+                        not_signed_up = []
+                        for user_id, display_name in role_members.items():
+                            if user_id not in signed_up_ids:
+                                not_signed_up.append(display_name)
 
-                        not_signed_up = [
-                            member for member in members_info
-                            if member['display_name'] and 
-                            clean_name(member['display_name']) not in signed_up_players
-                        ]
+                        # Sort names alphabetically
+                        not_signed_up.sort()
 
-                        message = f"**Comparison Results for '{role.name}':**\n\n"
+                        # Create message
+                        message = f"**Raid-Helper Comparison Results for '{role.name}':**\n"
+                        message += f"Event ID: {event_id}\n\n"
                         
                         if not_signed_up:
                             message += "**Not Signed Up Players:**\n"
-                            for member in not_signed_up:
-                                message += f"{member['display_name']} ({member['username']})\n"
+                            for name in not_signed_up:
+                                message += f"{name}\n"
                         else:
                             message += "All players are signed up! 🎉\n"
 
                         message += f"\n**Statistics:**\n"
-                        message += f"Signed up: {len(signed_up_players)}\n"
+                        message += f"Signed up: {len(signed_up_ids)}\n"
                         message += f"Not signed up: {len(not_signed_up)}\n"
-                        message += f"Total Discord members: {len(current_players)}\n"
+                        message += f"Total Discord members: {len(role_members)}\n"
 
                     else:
-                        message = f"Error loading JSON data: HTTP {response.status}"
+                        message = f"Error loading Raid-Helper data: HTTP {response.status}"
         except Exception as e:
-            message = f"Error processing JSON data: {str(e)}"
+            message = f"Error processing Raid-Helper data: {str(e)}"
 
         # Send message (split if too long)
         if len(message) > 2000:
