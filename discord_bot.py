@@ -30,7 +30,6 @@ class MemberBot(commands.Bot):
         for guild in self.guilds:
             print(f'- {guild.name} (id: {guild.id})')
             try:
-                # Sync commands for each guild
                 await self.tree.sync(guild=guild)
                 print(f"  Commands synced for {guild.name}")
             except Exception as e:
@@ -38,14 +37,13 @@ class MemberBot(commands.Bot):
 
 bot = MemberBot()
 
-@bot.tree.command(name="getmembers", description="Lists members with a specific role and compares with JSON data")
+@bot.tree.command(name="getmembers", description="Lists all members with a specific role")
 @app_commands.describe(
-    role="The role to check members for",
-    json_url="Optional: URL to JSON file for comparison"
+    role="The role to check members for"
 )
-async def get_members(interaction: discord.Interaction, role: discord.Role, json_url: str = None):
+async def get_members(interaction: discord.Interaction, role: discord.Role):
     try:
-        await interaction.response.defer()  # Defer the response for longer processing
+        await interaction.response.defer()
 
         # Create lists for different name types
         members_info = []
@@ -60,7 +58,7 @@ async def get_members(interaction: discord.Interaction, role: discord.Role, json
         # Sort by username
         members_info.sort(key=lambda x: x['username'].lower())
 
-        # Save all discord members first
+        # Save all discord members
         with open('discord_usernames.txt', 'w', encoding='utf-8') as f:
             for member in members_info:
                 f.write(f"{member['username']}\n")
@@ -70,59 +68,91 @@ async def get_members(interaction: discord.Interaction, role: discord.Role, json
                 if member['display_name']:
                     f.write(f"{member['display_name']}\n")
 
-        # If JSON URL is provided, compare members
-        if json_url:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(json_url) as response:
-                        if response.status == 200:
-                            json_data = await response.json()
-                            
-                            signed_up_players = []
-                            original_names = {}
-                            
-                            if 'signUps' in json_data:
-                                for player in json_data['signUps']:
-                                    if 'name' in player:
-                                        cleaned_name = clean_name(player['name'])
-                                        signed_up_players.append(cleaned_name)
-                                        original_names[cleaned_name] = player['name']
+        # Create message
+        message = f"**Members with role {role.name} ({len(members_info)}):**\n\n"
+        for member in members_info:
+            if member['display_name']:
+                message += f"{member['display_name']} ({member['username']})\n"
 
-                            current_players = [
-                                clean_name(member['display_name'])
-                                for member in members_info
-                                if member['display_name']
-                            ]
-
-                            not_signed_up = [
-                                member for member in members_info
-                                if member['display_name'] and 
-                                clean_name(member['display_name']) not in signed_up_players
-                            ]
-
-                            message = f"**Comparison Results for '{role.name}':**\n\n"
-                            
-                            if not_signed_up:
-                                message += "**Not Signed Up Players:**\n"
-                                for member in not_signed_up:
-                                    message += f"{member['display_name']} ({member['username']})\n"
-                            else:
-                                message += "All players are signed up! 🎉\n"
-
-                            message += f"\n**Statistics:**\n"
-                            message += f"Signed up: {len(signed_up_players)}\n"
-                            message += f"Not signed up: {len(not_signed_up)}\n"
-                            message += f"Total Discord members: {len(current_players)}\n"
-
-                        else:
-                            message = f"Error loading JSON data: HTTP {response.status}"
-            except Exception as e:
-                message = f"Error processing JSON data: {str(e)}"
+        # Send message (split if too long)
+        if len(message) > 2000:
+            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
+            for chunk in chunks:
+                await interaction.followup.send(chunk)
         else:
-            message = f"**All members with role {role.name} ({len(members_info)}):**\n\n"
-            for member in members_info:
-                if member['display_name']:
-                    message += f"{member['display_name']} ({member['username']})\n"
+            await interaction.followup.send(message)
+
+    except Exception as e:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(f"An error occurred: {str(e)}")
+        else:
+            await interaction.followup.send(f"An error occurred: {str(e)}")
+
+@bot.tree.command(name="checksignups", description="Compares role members with JSON signup data")
+@app_commands.describe(
+    role="The role to check members for",
+    json_url="URL to JSON file for comparison"
+)
+async def check_signups(interaction: discord.Interaction, role: discord.Role, json_url: str):
+    try:
+        await interaction.response.defer()
+
+        # Create lists for different name types
+        members_info = []
+        for member in role.members:
+            display_name = member.nick if member.nick else (member.global_name if member.global_name else None)
+            
+            members_info.append({
+                'username': member.name,
+                'display_name': display_name
+            })
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(json_url) as response:
+                    if response.status == 200:
+                        json_data = await response.json()
+                        
+                        signed_up_players = []
+                        original_names = {}
+                        
+                        if 'signUps' in json_data:
+                            for player in json_data['signUps']:
+                                if 'name' in player:
+                                    cleaned_name = clean_name(player['name'])
+                                    signed_up_players.append(cleaned_name)
+                                    original_names[cleaned_name] = player['name']
+
+                        current_players = [
+                            clean_name(member['display_name'])
+                            for member in members_info
+                            if member['display_name']
+                        ]
+
+                        not_signed_up = [
+                            member for member in members_info
+                            if member['display_name'] and 
+                            clean_name(member['display_name']) not in signed_up_players
+                        ]
+
+                        message = f"**Comparison Results for '{role.name}':**\n\n"
+                        
+                        if not_signed_up:
+                            message += "**Not Signed Up Players:**\n"
+                            for member in not_signed_up:
+                                message += f"{member['display_name']} ({member['username']})\n"
+                        else:
+                            message += "All players are signed up! 🎉\n"
+
+                        message += f"\n**Statistics:**\n"
+                        message += f"Signed up: {len(signed_up_players)}\n"
+                        message += f"Not signed up: {len(not_signed_up)}\n"
+                        message += f"Total Discord members: {len(current_players)}\n"
+
+                    else:
+                        message = f"Error loading JSON data: HTTP {response.status}"
+        except Exception as e:
+            message = f"Error processing JSON data: {str(e)}"
 
         # Send message (split if too long)
         if len(message) > 2000:
