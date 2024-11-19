@@ -5,6 +5,10 @@ config.py
 __pycache__/
 *.pyc
 
+# Database
+*.db
+bot_database.db
+
 # Environment files
 .env
 .venv
@@ -19,4 +23,3 @@ venv/
 discord_usernames.txt
 current_players.txt
 read_players.py
-bot_database.db
