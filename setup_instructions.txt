@@ -1,0 +1,54 @@
+Windows Server 2019 Setup für Discord Bot mit SQLite:
+
+1. Python Installation:
+   - Lade Python von https://www.python.org/downloads/windows/
+   - Wähle "Windows installer (64-bit)"
+   - Bei Installation "Add Python to PATH" aktivieren
+   - Als Administrator installieren
+
+2. Erforderliche Pakete:
+   - Öffne PowerShell als Administrator
+   - Führe aus:
+     pip install discord.py
+     pip install aiohttp
+     pip install python-dotenv
+
+3. Verzeichnisstruktur erstellen:
+   - Erstelle einen Ordner für den Bot (z.B. C:\DiscordBot)
+   - Kopiere alle Dateien in diesen Ordner:
+     - discord_bot.py
+     - database.py
+     - config.py
+     - config.example.py
+
+4. Berechtigungen:
+   - Rechtsklick auf Bot-Ordner -> Eigenschaften -> Sicherheit
+   - "Bearbeiten" klicken
+   - Dem Benutzer, unter dem der Bot läuft, Vollzugriff geben
+
+5. Firewall:
+   - Windows Defender Firewall -> Erweiterte Einstellungen
+   - Neue Regel für ausgehende Verbindungen für Python/Bot erstellen
+   - Port 443 (HTTPS) freigeben
+
+6. Bot als Windows-Dienst (optional):
+   - NSSM (Non-Sucking Service Manager) herunterladen
+   - Als Administrator installieren
+   - Dienst erstellen:
+     nssm install DiscordBot "C:\Path\To\Python.exe" "C:\Path\To\discord_bot.py"
+
+7. Erste Ausführung:
+   - PowerShell als Administrator öffnen
+   - Zum Bot-Verzeichnis navigieren
+   - Python discord_bot.py ausführen
+   - Überprüfen ob database.db erstellt wurde
+
+8. Backup-Planung:
+   - Task Scheduler einrichten für regelmäßige Backups der .db Datei
+   - Backup-Skript erstellen für database.db
+
+Wichtige Hinweise:
+- Regelmäßige Backups der database.db durchführen
+- Log-Rotation einrichten
+- Monitoring für den Bot-Dienst einrichten
+- Updates nur während Wartungsfenstern durchführen 
