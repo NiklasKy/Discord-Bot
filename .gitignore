@@ -19,3 +19,4 @@ venv/
 discord_usernames.txt
 current_players.txt
 read_players.py
+bot_database.db
