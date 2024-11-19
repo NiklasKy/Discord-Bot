@@ -5,7 +5,8 @@ import asyncio
 import aiohttp
 import json
 from datetime import datetime
-from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID
+from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID, DATABASE_FILE
+from database import Database
 
 def clean_name(name):
     return name.replace(" ", "").lower()
@@ -16,7 +17,7 @@ class MemberBot(commands.Bot):
         intents.members = True
         intents.message_content = True
         super().__init__(command_prefix='!', intents=intents)
-        self.afk_users = {}
+        self.db = Database(DATABASE_FILE)
 
     async def setup_hook(self):
         print(f'Bot is logged in as {self.user}')
@@ -25,17 +26,6 @@ class MemberBot(commands.Bot):
             print(f"Synced {len(synced)} command(s)")
         except Exception as e:
             print(f"Error syncing commands: {e}")
-
-    async def on_ready(self):
-        print(f'Bot is ready! Logged in as {self.user}')
-        print(f'Bot is in the following servers:')
-        for guild in self.guilds:
-            print(f'- {guild.name} (id: {guild.id})')
-            try:
-                await self.tree.sync(guild=guild)
-                print(f"  Commands synced for {guild.name}")
-            except Exception as e:
-                print(f"  Error syncing commands for {guild.name}: {e}")
 
 # Create bot instance
 bot = MemberBot()
@@ -47,9 +37,7 @@ def has_required_role():
     return app_commands.check(predicate)
 
 @bot.tree.command(name="getmembers", description="Lists all members with a specific role")
-@app_commands.describe(
-    role="The role to check members for"
-)
+@app_commands.describe(role="The role to check members for")
 @has_required_role()
 async def get_members(interaction: discord.Interaction, role: discord.Role):
     try:
@@ -184,12 +172,13 @@ async def afk(interaction: discord.Interaction, duration: str, reason: str):
         # Parse date
         until_date = datetime.strptime(duration, "%d.%m.%Y")
         
-        # Store AFK info
-        bot.afk_users[interaction.user.id] = {
-            'until': until_date,
-            'reason': reason,
-            'name': interaction.user.display_name
-        }
+        # Store AFK info in database
+        bot.db.set_afk(
+            user_id=interaction.user.id,
+            display_name=interaction.user.display_name,
+            until_date=until_date,
+            reason=reason
+        )
         
         await interaction.response.send_message(
             f"✅ Set AFK status for {interaction.user.display_name}\n"
@@ -204,8 +193,7 @@ async def afk(interaction: discord.Interaction, duration: str, reason: str):
 
 @bot.tree.command(name="unafk", description="Remove your AFK status")
 async def unafk(interaction: discord.Interaction):
-    if interaction.user.id in bot.afk_users:
-        del bot.afk_users[interaction.user.id]
+    if bot.db.remove_afk(interaction.user.id):
         await interaction.response.send_message(
             f"✅ Removed AFK status for {interaction.user.display_name}"
         )
@@ -217,27 +205,26 @@ async def unafk(interaction: discord.Interaction):
 
 @bot.tree.command(name="listafk", description="List all AFK users")
 async def listafk(interaction: discord.Interaction):
-    if not bot.afk_users:
+    # Get all active AFK users from database
+    afk_users = bot.db.get_all_active_afk()
+    
+    if not afk_users:
         await interaction.response.send_message("No users are currently AFK!")
         return
-
-    # Sort users by date
-    sorted_afk = sorted(
-        bot.afk_users.items(),
-        key=lambda x: x[1]['until']
-    )
 
     # Create message
     message = "**Currently AFK Users:**\n\n"
     current_time = datetime.now()
 
-    for user_id, afk_data in sorted_afk:
-        days_left = (afk_data['until'] - current_time).days
+    for user in afk_users:
+        user_id, display_name, until_date_str, reason, created_at = user
+        until_date = datetime.strptime(until_date_str, "%Y-%m-%d %H:%M:%S")
+        days_left = (until_date - current_time).days
         status = "🔴" if days_left < 0 else "🟢"
         
-        message += f"{status} **{afk_data['name']}**\n"
-        message += f"Until: {afk_data['until'].strftime('%d.%m.%Y')}\n"
-        message += f"Reason: {afk_data['reason']}\n\n"
+        message += f"{status} **{display_name}**\n"
+        message += f"Until: {until_date.strftime('%d.%m.%Y')}\n"
+        message += f"Reason: {reason}\n\n"
 
     # Send message (split if too long)
     if len(message) > 2000:
@@ -247,25 +234,40 @@ async def listafk(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(message)
 
-@bot.tree.command(name="afkclear", description="Clear all AFK statuses (Admin only)")
+@bot.tree.command(name="afkstats", description="Show AFK statistics")
 @has_required_role()
-async def afkclear(interaction: discord.Interaction):
-    try:
-        # Store the count of cleared entries
-        cleared_count = len(bot.afk_users)
-        
-        # Clear the AFK list
-        bot.afk_users.clear()
-        
-        await interaction.response.send_message(
-            f"✅ AFK list cleared! Removed {cleared_count} entries.",
-            ephemeral=True
-        )
-    except Exception as e:
-        await interaction.response.send_message(
-            f"❌ Error clearing AFK list: {str(e)}",
-            ephemeral=True
-        )
+async def afkstats(interaction: discord.Interaction):
+    stats = bot.db.get_afk_statistics()
+    total_afk, unique_users, currently_active, avg_duration = stats
+    
+    message = "**AFK Statistics:**\n\n"
+    message += f"Total AFK entries: {total_afk}\n"
+    message += f"Unique users: {unique_users}\n"
+    message += f"Currently AFK: {currently_active}\n"
+    message += f"Average AFK duration: {avg_duration:.1f} days\n"
+
+    await interaction.response.send_message(message)
+
+@bot.tree.command(name="afkhistory", description="Show AFK history for a user")
+@app_commands.describe(user="The user to check history for")
+@has_required_role()
+async def afkhistory(interaction: discord.Interaction, user: discord.Member):
+    history = bot.db.get_user_afk_history(user.id)
+    
+    if not history:
+        await interaction.response.send_message(f"No AFK history found for {user.display_name}")
+        return
+
+    message = f"**AFK History for {user.display_name}:**\n\n"
+    for entry in history:
+        display_name, until_date, reason, created_at, ended_at = entry
+        message += f"From: {created_at}\n"
+        message += f"Until: {until_date}\n"
+        if ended_at:
+            message += f"Ended: {ended_at}\n"
+        message += f"Reason: {reason}\n\n"
+
+    await interaction.response.send_message(message)
 
 def run_bot():
     bot.run(TOKEN)
