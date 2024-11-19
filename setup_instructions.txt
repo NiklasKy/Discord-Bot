@@ -36,6 +36,9 @@ Windows Server 2019 Setup für Discord Bot mit SQLite:
    - Als Administrator installieren
    - Dienst erstellen:
      nssm install DiscordBot "C:\Path\To\Python.exe" "C:\Path\To\discord_bot.py"
+   - Log-Dateien konfigurieren:
+     nssm set DiscordBot AppStdout "C:\Path\To\DiscordBot\logs\bot_output.log"
+     nssm set DiscordBot AppStderr "C:\Path\To\DiscordBot\logs\bot_error.log"
 
 7. Erste Ausführung:
    - PowerShell als Administrator öffnen
