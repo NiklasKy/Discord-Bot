@@ -162,32 +162,57 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
         else:
             await interaction.followup.send(f"An error occurred: {str(e)}")
 
-@bot.tree.command(name="afk", description="Set your AFK status")
+@bot.tree.command(name="afk", description="Set your AFK status (Time in UTC+1/CET)")
 @app_commands.describe(
-    duration="Date until you're AFK (format: DD.MM.YYYY)",
-    reason="Reason for being AFK"
+    date="Date until you're AFK (format: DD.MM.YYYY)",
+    reason="Reason for being AFK",
+    time="Time until you're AFK in UTC+1/CET (format: HH:MM, default: 23:59)"
 )
-async def afk(interaction: discord.Interaction, duration: str, reason: str):
+async def afk(interaction: discord.Interaction, date: str, reason: str, time: str = "23:59"):
     try:
-        # Parse date
-        until_date = datetime.strptime(duration, "%d.%m.%Y")
+        # Parse date and time
+        try:
+            until_datetime = datetime.strptime(f"{date} {time}", "%d.%m.%Y %H:%M")
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid date/time format!\n"
+                "Please use:\n"
+                "Date: DD.MM.YYYY\n"
+                "Time: HH:MM (optional, defaults to 23:59)\n"
+                "Note: Time must be in UTC+1/CET timezone!",
+                ephemeral=True
+            )
+            return
+
+        # Check if date is in the future
+        current_time = datetime.now()
+        if until_datetime <= current_time:
+            await interaction.response.send_message(
+                "❌ The AFK date must be in the future!",
+                ephemeral=True
+            )
+            return
         
         # Store AFK info in database
         bot.db.set_afk(
             user_id=interaction.user.id,
             display_name=interaction.user.display_name,
-            until_date=until_date,
+            until_date=until_datetime,
             reason=reason
         )
         
+        # Format response message
+        formatted_date = until_datetime.strftime("%d.%m.%Y")
+        formatted_time = until_datetime.strftime("%H:%M")
+        
         await interaction.response.send_message(
             f"✅ Set AFK status for {interaction.user.display_name}\n"
-            f"Until: {duration}\n"
+            f"Until: {formatted_date} {formatted_time} (UTC+1/CET)\n"
             f"Reason: {reason}"
         )
-    except ValueError:
+    except Exception as e:
         await interaction.response.send_message(
-            "❌ Invalid date format! Please use DD.MM.YYYY",
+            f"❌ An error occurred: {str(e)}",
             ephemeral=True
         )
 
