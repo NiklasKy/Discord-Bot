@@ -4,7 +4,8 @@ from discord.ext import commands
 import asyncio
 import aiohttp
 import json
-from config import TOKEN
+from datetime import datetime
+from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID
 
 def clean_name(name):
     return name.replace(" ", "").lower()
@@ -15,6 +16,7 @@ class MemberBot(commands.Bot):
         intents.members = True
         intents.message_content = True
         super().__init__(command_prefix='!', intents=intents)
+        self.afk_users = {}
 
     async def setup_hook(self):
         print(f'Bot is logged in as {self.user}')
@@ -35,12 +37,20 @@ class MemberBot(commands.Bot):
             except Exception as e:
                 print(f"  Error syncing commands for {guild.name}: {e}")
 
+# Create bot instance
 bot = MemberBot()
+
+# Check if user has required role
+def has_required_role():
+    async def predicate(interaction: discord.Interaction):
+        return any(role.id in [ADMIN_ROLE_ID, OFFICER_ROLE_ID] for role in interaction.user.roles)
+    return app_commands.check(predicate)
 
 @bot.tree.command(name="getmembers", description="Lists all members with a specific role")
 @app_commands.describe(
     role="The role to check members for"
 )
+@has_required_role()
 async def get_members(interaction: discord.Interaction, role: discord.Role):
     try:
         await interaction.response.defer()
@@ -93,6 +103,7 @@ async def get_members(interaction: discord.Interaction, role: discord.Role):
     role="The role to check members for",
     event_id="The Raid-Helper event ID"
 )
+@has_required_role()
 async def checksignups(interaction: discord.Interaction, role: discord.Role, event_id: str):
     try:
         await interaction.response.defer()
@@ -163,43 +174,98 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
         else:
             await interaction.followup.send(f"An error occurred: {str(e)}")
 
-@bot.tree.command(name="listroles", description="Shows all available roles on the server")
-async def list_roles(interaction: discord.Interaction):
+@bot.tree.command(name="afk", description="Set your AFK status")
+@app_commands.describe(
+    duration="Date until you're AFK (format: DD.MM.YYYY)",
+    reason="Reason for being AFK"
+)
+async def afk(interaction: discord.Interaction, duration: str, reason: str):
     try:
-        await interaction.response.defer()
-
-        # Get all roles except @everyone
-        roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
+        # Parse date
+        until_date = datetime.strptime(duration, "%d.%m.%Y")
         
-        # Sort roles by position
-        roles.sort(reverse=True, key=lambda x: x.position)
+        # Store AFK info
+        bot.afk_users[interaction.user.id] = {
+            'until': until_date,
+            'reason': reason,
+            'name': interaction.user.display_name
+        }
+        
+        await interaction.response.send_message(
+            f"✅ Set AFK status for {interaction.user.display_name}\n"
+            f"Until: {duration}\n"
+            f"Reason: {reason}"
+        )
+    except ValueError:
+        await interaction.response.send_message(
+            "❌ Invalid date format! Please use DD.MM.YYYY",
+            ephemeral=True
+        )
 
-        # Create formatted message
-        message = "**Available Roles on this Server:**\n\n"
-        for role in roles:
-            member_count = len(role.members)
-            color_hex = hex(role.color.value)[2:].zfill(6)
-            
-            message += f"• **{role.name}**\n"
-            message += f"  - Members: {member_count}\n"
-            message += f"  - Color: #{color_hex}\n"
-            message += f"  - Position: {role.position}\n"
-            message += f"  - Mentionable: {role.mentionable}\n"
-            message += f"  - Hoisted: {role.hoist}\n\n"
+@bot.tree.command(name="unafk", description="Remove your AFK status")
+async def unafk(interaction: discord.Interaction):
+    if interaction.user.id in bot.afk_users:
+        del bot.afk_users[interaction.user.id]
+        await interaction.response.send_message(
+            f"✅ Removed AFK status for {interaction.user.display_name}"
+        )
+    else:
+        await interaction.response.send_message(
+            "❌ You're not marked as AFK!",
+            ephemeral=True
+        )
 
-        # Send message (split if too long)
-        if len(message) > 2000:
-            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
-            for chunk in chunks:
-                await interaction.followup.send(chunk)
-        else:
-            await interaction.followup.send(message)
+@bot.tree.command(name="listafk", description="List all AFK users")
+async def listafk(interaction: discord.Interaction):
+    if not bot.afk_users:
+        await interaction.response.send_message("No users are currently AFK!")
+        return
 
+    # Sort users by date
+    sorted_afk = sorted(
+        bot.afk_users.items(),
+        key=lambda x: x[1]['until']
+    )
+
+    # Create message
+    message = "**Currently AFK Users:**\n\n"
+    current_time = datetime.now()
+
+    for user_id, afk_data in sorted_afk:
+        days_left = (afk_data['until'] - current_time).days
+        status = "🔴" if days_left < 0 else "🟢"
+        
+        message += f"{status} **{afk_data['name']}**\n"
+        message += f"Until: {afk_data['until'].strftime('%d.%m.%Y')}\n"
+        message += f"Reason: {afk_data['reason']}\n\n"
+
+    # Send message (split if too long)
+    if len(message) > 2000:
+        chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
+        for chunk in chunks:
+            await interaction.followup.send(chunk)
+    else:
+        await interaction.response.send_message(message)
+
+@bot.tree.command(name="afkclear", description="Clear all AFK statuses (Admin only)")
+@has_required_role()
+async def afkclear(interaction: discord.Interaction):
+    try:
+        # Store the count of cleared entries
+        cleared_count = len(bot.afk_users)
+        
+        # Clear the AFK list
+        bot.afk_users.clear()
+        
+        await interaction.response.send_message(
+            f"✅ AFK list cleared! Removed {cleared_count} entries.",
+            ephemeral=True
+        )
     except Exception as e:
-        if not interaction.response.is_done():
-            await interaction.response.send_message(f"An error occurred: {str(e)}")
-        else:
-            await interaction.followup.send(f"An error occurred: {str(e)}")
+        await interaction.response.send_message(
+            f"❌ Error clearing AFK list: {str(e)}",
+            ephemeral=True
+        )
 
 def run_bot():
     bot.run(TOKEN)
