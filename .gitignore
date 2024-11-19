@@ -9,6 +9,11 @@ __pycache__/
 *.db
 bot_database.db
 
+# Log files
+*.Log
+logs/bot_output.log
+logs/bot_error.log
+
 # Environment files
 .env
 .venv
