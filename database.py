@@ -171,3 +171,41 @@ class Database:
                 ''')
             
             return cursor.fetchone() 
+
+    def delete_afk_entries(self, user_id: int, all_entries: bool = False) -> int:
+        """
+        Delete AFK entries for a specific user
+        
+        Args:
+            user_id: The Discord user ID
+            all_entries: If True, deletes all entries, if False only deletes active entries
+        
+        Returns:
+            Number of deleted entries
+        """
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                
+                if all_entries:
+                    # Delete all entries for the user
+                    cursor.execute('''
+                        DELETE FROM afk_users 
+                        WHERE user_id = ?
+                    ''', (user_id,))
+                else:
+                    # Delete only active entries
+                    cursor.execute('''
+                        DELETE FROM afk_users 
+                        WHERE user_id = ? AND is_active = 1
+                    ''', (user_id,))
+                
+                deleted_count = cursor.rowcount
+                conn.commit()
+                
+                logging.info(f"Deleted {deleted_count} AFK entries for user {user_id}")
+                return deleted_count
+
+        except sqlite3.Error as e:
+            logging.error(f"Error deleting AFK entries: {e}")
+            raise 

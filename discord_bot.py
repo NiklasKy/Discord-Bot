@@ -457,6 +457,39 @@ async def myafk(interaction: discord.Interaction):
             ephemeral=True
         )
 
+@bot.tree.command(name="afkdelete", description="Delete AFK entries (Admin only)")
+@app_commands.describe(
+    user="The user whose AFK entries you want to delete",
+    all_entries="Delete all entries for this user? If false, only deletes active entries"
+)
+@has_required_role()
+async def afkdelete(
+    interaction: discord.Interaction, 
+    user: discord.Member, 
+    all_entries: bool = False
+):
+    try:
+        await interaction.response.defer()
+
+        # Delete entries and get count of deleted entries
+        deleted_count = bot.db.delete_afk_entries(user.id, all_entries)
+
+        if deleted_count > 0:
+            message = f"✅ Successfully deleted {deleted_count} AFK "
+            message += f"{'entries' if deleted_count > 1 else 'entry'} for {user.display_name}"
+            if not all_entries:
+                message += " (active entries only)"
+        else:
+            message = f"❌ No {'active ' if not all_entries else ''}AFK entries found for {user.display_name}"
+
+        await interaction.followup.send(message)
+
+    except Exception as e:
+        await interaction.followup.send(
+            f"❌ An error occurred: {str(e)}",
+            ephemeral=True
+        )
+
 def run_bot():
     bot.run(TOKEN)
 
