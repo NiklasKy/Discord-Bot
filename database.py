@@ -139,19 +139,35 @@ class Database:
             ''', (user_id, limit))
             return cursor.fetchall()
 
-    def get_afk_statistics(self):
-        """Get general AFK statistics"""
+    def get_afk_statistics(self, clan_role_id: int = None):
+        """Get AFK statistics for a specific clan"""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT 
-                    COUNT(*) as total_afk,
-                    COUNT(DISTINCT user_id) as unique_users,
-                    COUNT(CASE WHEN is_active = 1 THEN 1 END) as currently_active,
-                    AVG(CASE 
-                        WHEN ended_at IS NOT NULL 
-                        THEN julianday(ended_at) - julianday(created_at) 
-                        END) as avg_duration_days
-                FROM afk_users
-            ''')
+            
+            if clan_role_id is not None:
+                cursor.execute('''
+                    SELECT 
+                        COUNT(*) as total_afk,
+                        COUNT(DISTINCT user_id) as unique_users,
+                        COUNT(CASE WHEN is_active = 1 THEN 1 END) as currently_active,
+                        AVG(CASE 
+                            WHEN ended_at IS NOT NULL 
+                            THEN julianday(ended_at) - julianday(created_at) 
+                            END) as avg_duration_days
+                    FROM afk_users
+                    WHERE clan_role_id = ?
+                ''', (clan_role_id,))
+            else:
+                cursor.execute('''
+                    SELECT 
+                        COUNT(*) as total_afk,
+                        COUNT(DISTINCT user_id) as unique_users,
+                        COUNT(CASE WHEN is_active = 1 THEN 1 END) as currently_active,
+                        AVG(CASE 
+                            WHEN ended_at IS NOT NULL 
+                            THEN julianday(ended_at) - julianday(created_at) 
+                            END) as avg_duration_days
+                    FROM afk_users
+                ''')
+            
             return cursor.fetchone() 

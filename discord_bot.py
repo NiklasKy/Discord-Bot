@@ -337,19 +337,47 @@ async def listafk(interaction: discord.Interaction):
             ephemeral=True
         )
 
-@bot.tree.command(name="afkstats", description="Show AFK statistics")
+@bot.tree.command(name="afkstats", description="Show AFK statistics for all clans")
 @has_required_role()
 async def afkstats(interaction: discord.Interaction):
-    stats = bot.db.get_afk_statistics()
-    total_afk, unique_users, currently_active, avg_duration = stats
-    
-    message = "**AFK Statistics:**\n\n"
-    message += f"Total AFK entries: {total_afk}\n"
-    message += f"Unique users: {unique_users}\n"
-    message += f"Currently AFK: {currently_active}\n"
-    message += f"Average AFK duration: {avg_duration:.1f} days\n"
+    try:
+        await interaction.response.defer()
 
-    await interaction.response.send_message(message)
+        message = "**AFK Statistics:**\n\n"
+
+        # Get stats for each clan
+        clan_configs = [
+            (CLAN1_ROLE_ID, "Requiem Sun"),
+            (CLAN2_ROLE_ID, "Requiem Moon")
+        ]
+
+        for clan_role_id, clan_name in clan_configs:
+            stats = bot.db.get_afk_statistics(clan_role_id)
+            if stats:
+                total_afk, unique_users, currently_active, avg_duration = stats
+                
+                message += f"__**{clan_name}:**__\n"
+                message += f"Total AFK entries: {total_afk}\n"
+                message += f"Unique users: {unique_users}\n"
+                message += f"Currently AFK: {currently_active}\n"
+                if avg_duration:
+                    message += f"Average AFK duration: {avg_duration:.1f} days\n"
+                message += "\n"
+
+        # Send message
+        await interaction.followup.send(message)
+
+    except Exception as e:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                f"❌ An error occurred: {str(e)}",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                f"❌ An error occurred: {str(e)}",
+                ephemeral=True
+            )
 
 @bot.tree.command(name="afkhistory", description="Show AFK history for a user")
 @app_commands.describe(user="The user to check history for")
@@ -389,12 +417,17 @@ async def myafk(interaction: discord.Interaction):
         message = "**Your AFK History:**\n\n"
         
         for entry in history:
-            display_name, until_date, reason, created_at, ended_at = entry
+            # Unpack all values (including clan_role_id)
+            display_name, until_date, reason, created_at, ended_at, clan_role_id = entry
             
             # Convert strings to datetime objects for better formatting
             until_datetime = datetime.strptime(until_date, "%Y-%m-%d %H:%M:%S")
             created_datetime = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
             
+            # Determine clan name
+            clan_name = "Requiem Sun" if clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
+            
+            message += f"**Clan:** {clan_name}\n"
             message += f"**Set on:** {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
             message += f"**Until:** {until_datetime.strftime('%d/%m/%Y %H:%M')}\n"
             message += f"**Reason:** {reason}\n"
