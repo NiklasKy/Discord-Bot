@@ -1,14 +1,33 @@
 import sqlite3
 from datetime import datetime
+import os
+import logging
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot_database.log'),
+        logging.StreamHandler()
+    ]
+)
 
 class Database:
     def __init__(self, db_file="bot_database.db"):
         self.db_file = db_file
+        logging.info(f"Initializing database at: {os.path.abspath(db_file)}")
         self.init_database()
 
     def init_database(self):
         """Initialize the database and create tables if they don't exist"""
         try:
+            # Ensure the directory exists
+            db_dir = os.path.dirname(os.path.abspath(self.db_file))
+            if not os.path.exists(db_dir):
+                os.makedirs(db_dir)
+                logging.info(f"Created directory: {db_dir}")
+
             with sqlite3.connect(self.db_file) as conn:
                 cursor = conn.cursor()
                 
@@ -38,9 +57,14 @@ class Database:
                 ''')
                 
                 conn.commit()
-                print(f"Database initialized at {self.db_file}")
+                logging.info("Database initialized successfully")
+
+        except sqlite3.Error as e:
+            logging.error(f"SQLite error during initialization: {e}")
+            raise
         except Exception as e:
-            print(f"Database initialization error: {e}")
+            logging.error(f"Unexpected error during database initialization: {e}")
+            raise
 
     def set_afk(self, user_id: int, display_name: str, until_date: datetime, reason: str, clan_role_id: int):
         """Set a user as AFK"""

@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID, DATABASE_FILE, CLAN1_ROLE_ID, CLAN2_ROLE_ID
 from database import Database
+import os
 
 def clean_name(name):
     return name.replace(" ", "").lower()
@@ -17,7 +18,15 @@ class MemberBot(commands.Bot):
         intents.members = True
         intents.message_content = True
         super().__init__(command_prefix='!', intents=intents)
-        self.db = Database(DATABASE_FILE)
+        
+        # Initialize database with explicit path
+        try:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DATABASE_FILE)
+            self.db = Database(db_path)
+            print(f"Database initialized at: {db_path}")
+        except Exception as e:
+            print(f"Failed to initialize database: {e}")
+            raise
 
     async def setup_hook(self):
         print(f'Bot is logged in as {self.user}')
