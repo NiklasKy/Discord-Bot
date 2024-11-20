@@ -128,16 +128,26 @@ class Database:
 
     def get_user_afk_history(self, user_id: int, limit: int = 5):
         """Get AFK history for a specific user"""
-        with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT display_name, until_date, reason, created_at, ended_at, clan_role_id
-                FROM afk_users 
-                WHERE user_id = ? 
-                ORDER BY created_at DESC 
-                LIMIT ?
-            ''', (user_id, limit))
-            return cursor.fetchall()
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT 
+                        display_name, 
+                        until_date, 
+                        reason, 
+                        created_at, 
+                        ended_at,
+                        clan_role_id
+                    FROM afk_users 
+                    WHERE user_id = ? 
+                    ORDER BY created_at DESC 
+                    LIMIT ?
+                ''', (user_id, limit))
+                return cursor.fetchall()
+        except sqlite3.Error as e:
+            logging.error(f"Error getting user AFK history: {e}")
+            raise
 
     def get_afk_statistics(self, clan_role_id: int = None):
         """Get AFK statistics for a specific clan"""

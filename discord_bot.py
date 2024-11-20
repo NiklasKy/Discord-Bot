@@ -379,26 +379,73 @@ async def afkstats(interaction: discord.Interaction):
                 ephemeral=True
             )
 
-@bot.tree.command(name="afkhistory", description="Show AFK history for a user")
+@bot.tree.command(name="afkhistory", description="Show AFK history for a user (Admin/Officer only)")
 @app_commands.describe(user="The user to check history for")
 @has_required_role()
 async def afkhistory(interaction: discord.Interaction, user: discord.Member):
-    history = bot.db.get_user_afk_history(user.id)
-    
-    if not history:
-        await interaction.response.send_message(f"No AFK history found for {user.display_name}")
-        return
+    try:
+        await interaction.response.defer()
+        
+        # Get user's AFK history from database
+        history = bot.db.get_user_afk_history(user.id)
+        
+        if not history:
+            await interaction.followup.send(
+                f"No AFK history found for {user.display_name}",
+                ephemeral=True
+            )
+            return
 
-    message = f"**AFK History for {user.display_name}:**\n\n"
-    for entry in history:
-        display_name, until_date, reason, created_at, ended_at = entry
-        message += f"From: {created_at}\n"
-        message += f"Until: {until_date}\n"
-        if ended_at:
-            message += f"Ended: {ended_at}\n"
-        message += f"Reason: {reason}\n\n"
+        # Create message
+        message = f"**AFK History for {user.display_name}:**\n\n"
+        
+        for entry in history:
+            # Unpack all values (including clan_role_id)
+            display_name, until_date, reason, created_at, ended_at, clan_role_id = entry
+            
+            # Convert strings to datetime objects for better formatting
+            until_datetime = datetime.strptime(until_date, "%Y-%m-%d %H:%M:%S")
+            created_datetime = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+            
+            # Determine clan name
+            clan_name = "Requiem Sun" if clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
+            
+            # Format each entry
+            message += f"**Clan:** {clan_name}\n"
+            message += f"**Set on:** {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"**Until:** {until_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"**Reason:** {reason}\n"
+            
+            if ended_at:
+                ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
+                message += f"**Ended:** {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            else:
+                message += "**Status:** Still active\n"
+            
+            message += "─────────────\n"
 
-    await interaction.response.send_message(message)
+        # Send message (split if too long)
+        if len(message) > 2000:
+            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await interaction.followup.send(chunk)
+                else:
+                    await interaction.followup.send(chunk)
+        else:
+            await interaction.followup.send(message)
+
+    except Exception as e:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                f"❌ An error occurred: {str(e)}",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                f"❌ An error occurred: {str(e)}",
+                ephemeral=True
+            )
 
 @bot.tree.command(name="myafk", description="Show your personal AFK history")
 async def myafk(interaction: discord.Interaction):
