@@ -11,7 +11,7 @@ class Database:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             
-            # Create AFK users table with status tracking
+            # Create AFK users table with clan information
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS afk_users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,33 +19,36 @@ class Database:
                     display_name TEXT NOT NULL,
                     until_date TEXT NOT NULL,
                     reason TEXT,
+                    clan_role_id INTEGER NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     ended_at TEXT DEFAULT NULL,
                     is_active BOOLEAN DEFAULT 1
                 )
             ''')
             
-            # Create index for faster queries
+            # Create indices for faster queries
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_user_status 
                 ON afk_users(user_id, is_active)
             ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_clan_status 
+                ON afk_users(clan_role_id, is_active)
+            ''')
             
             conn.commit()
 
-    def set_afk(self, user_id: int, display_name: str, until_date: datetime, reason: str):
+    def set_afk(self, user_id: int, display_name: str, until_date: datetime, reason: str, clan_role_id: int):
         """Set a user as AFK"""
-        # First, deactivate any active AFK status for this user
         self.deactivate_previous_afk(user_id)
         
-        # Then create new AFK entry
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO afk_users 
-                (user_id, display_name, until_date, reason, is_active)
-                VALUES (?, ?, ?, ?, 1)
-            ''', (user_id, display_name, until_date.strftime("%Y-%m-%d %H:%M:%S"), reason))
+                (user_id, display_name, until_date, reason, clan_role_id, is_active)
+                VALUES (?, ?, ?, ?, ?, 1)
+            ''', (user_id, display_name, until_date.strftime("%Y-%m-%d %H:%M:%S"), reason, clan_role_id))
             conn.commit()
 
     def deactivate_previous_afk(self, user_id: int):
@@ -75,16 +78,24 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
-    def get_all_active_afk(self):
-        """Get all currently active AFK users"""
+    def get_all_active_afk(self, clan_role_id: int = None):
+        """Get all active AFK users, optionally filtered by clan"""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT user_id, display_name, until_date, reason, created_at 
-                FROM afk_users 
-                WHERE is_active = 1 
-                ORDER BY until_date ASC
-            ''')
+            if clan_role_id is not None:
+                cursor.execute('''
+                    SELECT user_id, display_name, until_date, reason, created_at 
+                    FROM afk_users 
+                    WHERE is_active = 1 AND clan_role_id = ?
+                    ORDER BY until_date ASC
+                ''', (clan_role_id,))
+            else:
+                cursor.execute('''
+                    SELECT user_id, display_name, until_date, reason, created_at 
+                    FROM afk_users 
+                    WHERE is_active = 1 
+                    ORDER BY until_date ASC
+                ''')
             return cursor.fetchall()
 
     def get_user_afk_history(self, user_id: int, limit: int = 5):
@@ -92,7 +103,7 @@ class Database:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT display_name, until_date, reason, created_at, ended_at 
+                SELECT display_name, until_date, reason, created_at, ended_at, clan_role_id
                 FROM afk_users 
                 WHERE user_id = ? 
                 ORDER BY created_at DESC 

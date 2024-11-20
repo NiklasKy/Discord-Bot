@@ -5,7 +5,7 @@ import asyncio
 import aiohttp
 import json
 from datetime import datetime
-from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID, DATABASE_FILE
+from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID, DATABASE_FILE, CLAN1_ROLE_ID, CLAN2_ROLE_ID
 from database import Database
 
 def clean_name(name):
@@ -170,6 +170,22 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
 )
 async def afk(interaction: discord.Interaction, date: str, time: str, reason: str):
     try:
+        # Check if user has any clan role
+        user_roles = interaction.user.roles
+        clan_role_id = None
+        
+        if any(role.id == CLAN1_ROLE_ID for role in user_roles):
+            clan_role_id = CLAN1_ROLE_ID
+        elif any(role.id == CLAN2_ROLE_ID for role in user_roles):
+            clan_role_id = CLAN2_ROLE_ID
+            
+        if clan_role_id is None:
+            await interaction.response.send_message(
+                "❌ You must be a member of a clan to use this command!",
+                ephemeral=True
+            )
+            return
+
         # Parse date and time
         try:
             until_datetime = datetime.strptime(f"{date} {time}", "%d/%m/%Y %H:%M")
@@ -193,12 +209,13 @@ async def afk(interaction: discord.Interaction, date: str, time: str, reason: st
             )
             return
         
-        # Store AFK info in database
+        # Store AFK info in database with clan role
         bot.db.set_afk(
             user_id=interaction.user.id,
             display_name=interaction.user.display_name,
             until_date=until_datetime,
-            reason=reason
+            reason=reason,
+            clan_role_id=clan_role_id
         )
         
         # Format response message
@@ -210,6 +227,7 @@ async def afk(interaction: discord.Interaction, date: str, time: str, reason: st
             f"Until: {formatted_date} {formatted_time} (UTC+1/CET)\n"
             f"Reason: {reason}"
         )
+
     except Exception as e:
         await interaction.response.send_message(
             f"❌ An error occurred: {str(e)}",
@@ -228,36 +246,87 @@ async def unafk(interaction: discord.Interaction):
             ephemeral=True
         )
 
-@bot.tree.command(name="listafk", description="List all AFK users")
+@bot.tree.command(name="listafk", description="List all AFK users from your clan")
 async def listafk(interaction: discord.Interaction):
-    # Get all active AFK users from database
-    afk_users = bot.db.get_all_active_afk()
-    
-    if not afk_users:
-        await interaction.response.send_message("No users are currently AFK!")
-        return
-
-    # Create message
-    message = "**Currently AFK Users:**\n\n"
-    current_time = datetime.now()
-
-    for user in afk_users:
-        user_id, display_name, until_date_str, reason, created_at = user
-        until_date = datetime.strptime(until_date_str, "%Y-%m-%d %H:%M:%S")
-        days_left = (until_date - current_time).days
-        status = "🔴" if days_left < 0 else "🟢"
+    try:
+        # Check if user is admin/officer
+        is_admin = any(role.id in [ADMIN_ROLE_ID, OFFICER_ROLE_ID] for role in interaction.user.roles)
         
-        message += f"{status} **{display_name}**\n"
-        message += f"Until: {until_date.strftime('%d/%m/%Y')}\n"
-        message += f"Reason: {reason}\n\n"
+        # For regular users, check clan membership
+        user_roles = interaction.user.roles
+        user_clan_role_id = None
+        
+        if any(role.id == CLAN1_ROLE_ID for role in user_roles):
+            user_clan_role_id = CLAN1_ROLE_ID
+        elif any(role.id == CLAN2_ROLE_ID for role in user_roles):
+            user_clan_role_id = CLAN2_ROLE_ID
+            
+        if not is_admin and user_clan_role_id is None:
+            await interaction.response.send_message(
+                "❌ You must be a member of a clan to use this command!",
+                ephemeral=True
+            )
+            return
 
-    # Send message (split if too long)
-    if len(message) > 2000:
-        chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
-        for chunk in chunks:
-            await interaction.followup.send(chunk)
-    else:
-        await interaction.response.send_message(message)
+        # Create message
+        message = "**Currently AFK Users:**\n\n"
+        current_time = datetime.now()
+
+        # Function to format AFK users for a clan
+        def format_clan_afk_users(afk_users):
+            formatted_msg = ""
+            for user in afk_users:
+                user_id, display_name, until_date_str, reason, created_at = user
+                until_date = datetime.strptime(until_date_str, "%Y-%m-%d %H:%M:%S")
+                days_left = (until_date - current_time).days
+                status = "🔴" if days_left < 0 else "🟢"
+                
+                formatted_msg += f"{status} **{display_name}**\n"
+                formatted_msg += f"Until: {until_date.strftime('%d/%m/%Y %H:%M')} (UTC+1/CET)\n"
+                formatted_msg += f"Reason: {reason}\n\n"
+            return formatted_msg
+
+        if is_admin:
+            # Get and display AFK users for each clan
+            clan_configs = [
+                (CLAN1_ROLE_ID, "Requiem Sun"),
+                (CLAN2_ROLE_ID, "Requiem Moon")
+            ]
+            
+            for clan_role_id, clan_name in clan_configs:
+                afk_users = bot.db.get_all_active_afk(clan_role_id)
+                if afk_users:
+                    message += f"__**{clan_name}:**__\n"
+                    message += format_clan_afk_users(afk_users)
+                    message += "─────────────\n"
+        else:
+            # Regular users only see their own clan
+            clan_name = "Requiem Sun" if user_clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
+            afk_users = bot.db.get_all_active_afk(user_clan_role_id)
+            
+            if not afk_users:
+                await interaction.response.send_message(f"No users from {clan_name} are currently AFK!")
+                return
+                
+            message += f"__**{clan_name}:**__\n"
+            message += format_clan_afk_users(afk_users)
+
+        # Send message (split if too long)
+        if len(message) > 2000:
+            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await interaction.response.send_message(chunk)
+                else:
+                    await interaction.followup.send(chunk)
+        else:
+            await interaction.response.send_message(message)
+
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ An error occurred: {str(e)}",
+            ephemeral=True
+        )
 
 @bot.tree.command(name="afkstats", description="Show AFK statistics")
 @has_required_role()
@@ -293,6 +362,58 @@ async def afkhistory(interaction: discord.Interaction, user: discord.Member):
         message += f"Reason: {reason}\n\n"
 
     await interaction.response.send_message(message)
+
+@bot.tree.command(name="myafk", description="Show your personal AFK history")
+async def myafk(interaction: discord.Interaction):
+    try:
+        # Get user's AFK history from database
+        history = bot.db.get_user_afk_history(interaction.user.id)
+        
+        if not history:
+            await interaction.response.send_message(
+                "You have no AFK history.",
+                ephemeral=True
+            )
+            return
+
+        # Create message
+        message = "**Your AFK History:**\n\n"
+        
+        for entry in history:
+            display_name, until_date, reason, created_at, ended_at = entry
+            
+            # Convert strings to datetime objects for better formatting
+            until_datetime = datetime.strptime(until_date, "%Y-%m-%d %H:%M:%S")
+            created_datetime = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+            
+            message += f"**Set on:** {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"**Until:** {until_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"**Reason:** {reason}\n"
+            
+            if ended_at:
+                ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
+                message += f"**Ended:** {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            else:
+                message += "**Status:** Still active\n"
+            
+            message += "─────────────\n"
+
+        # Send message (split if too long)
+        if len(message) > 2000:
+            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await interaction.response.send_message(chunk)
+                else:
+                    await interaction.followup.send(chunk)
+        else:
+            await interaction.response.send_message(message)
+
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ An error occurred: {str(e)}",
+            ephemeral=True
+        )
 
 def run_bot():
     bot.run(TOKEN)
