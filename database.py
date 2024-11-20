@@ -8,35 +8,39 @@ class Database:
 
     def init_database(self):
         """Initialize the database and create tables if they don't exist"""
-        with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.cursor()
-            
-            # Create AFK users table with clan information
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS afk_users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    display_name TEXT NOT NULL,
-                    until_date TEXT NOT NULL,
-                    reason TEXT,
-                    clan_role_id INTEGER NOT NULL,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    ended_at TEXT DEFAULT NULL,
-                    is_active BOOLEAN DEFAULT 1
-                )
-            ''')
-            
-            # Create indices for faster queries
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_user_status 
-                ON afk_users(user_id, is_active)
-            ''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_clan_status 
-                ON afk_users(clan_role_id, is_active)
-            ''')
-            
-            conn.commit()
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                
+                # Create AFK users table with clan information
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS afk_users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        display_name TEXT NOT NULL,
+                        until_date TEXT NOT NULL,
+                        reason TEXT,
+                        clan_role_id INTEGER NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        ended_at TEXT DEFAULT NULL,
+                        is_active BOOLEAN DEFAULT 1
+                    )
+                ''')
+                
+                # Create indices for faster queries
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_user_status 
+                    ON afk_users(user_id, is_active)
+                ''')
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_clan_status 
+                    ON afk_users(clan_role_id, is_active)
+                ''')
+                
+                conn.commit()
+                print(f"Database initialized at {self.db_file}")
+        except Exception as e:
+            print(f"Database initialization error: {e}")
 
     def set_afk(self, user_id: int, display_name: str, until_date: datetime, reason: str, clan_role_id: int):
         """Set a user as AFK"""
