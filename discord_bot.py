@@ -164,21 +164,21 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
 
 @bot.tree.command(name="afk", description="Set your AFK status (Time in UTC+1/CET)")
 @app_commands.describe(
-    date="Date until you're AFK (format: DD.MM.YYYY)",
-    reason="Reason for being AFK",
-    time="Time until you're AFK in UTC+1/CET (format: HH:MM, default: 23:59)"
+    date="Date until you're AFK (format: DD/MM/YYYY)",
+    time="Time until you're AFK in UTC+1/CET (format: HH:MM)",
+    reason="Reason for being AFK"
 )
-async def afk(interaction: discord.Interaction, date: str, reason: str, time: str = "23:59"):
+async def afk(interaction: discord.Interaction, date: str, time: str, reason: str):
     try:
         # Parse date and time
         try:
-            until_datetime = datetime.strptime(f"{date} {time}", "%d.%m.%Y %H:%M")
+            until_datetime = datetime.strptime(f"{date} {time}", "%d/%m/%Y %H:%M")
         except ValueError:
             await interaction.response.send_message(
                 "❌ Invalid date/time format!\n"
                 "Please use:\n"
-                "Date: DD.MM.YYYY\n"
-                "Time: HH:MM (optional, defaults to 23:59)\n"
+                "Date: DD/MM/YYYY\n"
+                "Time: HH:MM\n"
                 "Note: Time must be in UTC+1/CET timezone!",
                 ephemeral=True
             )
@@ -202,7 +202,7 @@ async def afk(interaction: discord.Interaction, date: str, reason: str, time: st
         )
         
         # Format response message
-        formatted_date = until_datetime.strftime("%d.%m.%Y")
+        formatted_date = until_datetime.strftime("%d/%m/%Y")
         formatted_time = until_datetime.strftime("%H:%M")
         
         await interaction.response.send_message(
@@ -248,7 +248,7 @@ async def listafk(interaction: discord.Interaction):
         status = "🔴" if days_left < 0 else "🟢"
         
         message += f"{status} **{display_name}**\n"
-        message += f"Until: {until_date.strftime('%d.%m.%Y')}\n"
+        message += f"Until: {until_date.strftime('%d/%m/%Y')}\n"
         message += f"Reason: {reason}\n\n"
 
     # Send message (split if too long)
