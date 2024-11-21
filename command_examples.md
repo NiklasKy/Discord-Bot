@@ -23,18 +23,19 @@
 #### Setting AFK Status
 Command: `/afk`
 Parameters:
-- `start_date` (required): DD/MM/YYYY or 'now'
-- `start_time` (required): HH:MM or 'now'
+- `start_date` (required): DD/MM/YYYY
+- `start_time` (required): HH:MM
 - `end_date` (required): DD/MM/YYYY
 - `end_time` (required): HH:MM
 - `reason` (required): Text explanation
 
 Examples:
 ```
-/afk start_date:now start_time:now end_date:31/12/2023 end_time:23:59 reason:New Year's Eve
 /afk start_date:24/12/2023 start_time:18:00 end_date:26/12/2023 end_time:10:00 reason:Christmas Holiday
-/afk start_date:01/01/2024 start_time:00:01 end_date:02/01/2024 end_time:12:00 reason:Recovery Day
+/afk start_date:31/12/2023 start_time:20:00 end_date:01/01/2024 end_time:12:00 reason:New Year's Eve
 ```
+
+Note: All times must be in UTC+1/CET timezone and cannot be in the past.
 
 #### Remove AFK Status
 Command: `/unafk`

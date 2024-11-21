@@ -173,8 +173,8 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
 
 @bot.tree.command(name="afk", description="Set your AFK status (Time in UTC+1/CET)")
 @app_commands.describe(
-    start_date="Start date (DD/MM/YYYY or 'now')",
-    start_time="Start time in UTC+1/CET (HH:MM or 'now')",
+    start_date="Start date (DD/MM/YYYY)",
+    start_time="Start time in UTC+1/CET (HH:MM)",
     end_date="End date (DD/MM/YYYY)",
     end_time="End time in UTC+1/CET (HH:MM)",
     reason="Reason for being AFK"
@@ -188,25 +188,19 @@ async def afk(
     reason: str
 ):
     try:
-        # Get current time for 'now' option and validation
-        current_time = datetime.now()
-
         # Parse start date/time
-        if start_date.lower() == 'now' or start_time.lower() == 'now':
-            start_datetime = current_time
-        else:
-            try:
-                start_datetime = datetime.strptime(f"{start_date} {start_time}", "%d/%m/%Y %H:%M")
-            except ValueError:
-                await interaction.response.send_message(
-                    "❌ Invalid start date/time format!\n"
-                    "Please use:\n"
-                    "Date: DD/MM/YYYY or 'now'\n"
-                    "Time: HH:MM or 'now'\n"
-                    "Note: Time must be in UTC+1/CET timezone!",
-                    ephemeral=True
-                )
-                return
+        try:
+            start_datetime = datetime.strptime(f"{start_date} {start_time}", "%d/%m/%Y %H:%M")
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid start date/time format!\n"
+                "Please use:\n"
+                "Date: DD/MM/YYYY\n"
+                "Time: HH:MM\n"
+                "Note: Time must be in UTC+1/CET timezone!",
+                ephemeral=True
+            )
+            return
 
         # Parse end date/time
         try:
@@ -222,6 +216,9 @@ async def afk(
             )
             return
 
+        # Get current time for validation
+        current_time = datetime.now()
+
         # Validate time periods
         if end_datetime <= current_time:
             await interaction.response.send_message(
@@ -233,6 +230,13 @@ async def afk(
         if end_datetime <= start_datetime:
             await interaction.response.send_message(
                 "❌ The end date/time must be after the start date/time!",
+                ephemeral=True
+            )
+            return
+
+        if start_datetime < current_time:
+            await interaction.response.send_message(
+                "❌ The start date/time cannot be in the past!",
                 ephemeral=True
             )
             return
