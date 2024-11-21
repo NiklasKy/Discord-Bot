@@ -7,6 +7,7 @@
 - `/unafk` - Remove AFK status
 - `/listafk` - View AFK list for your clan
 - `/myafk` - View personal AFK history
+- `/quickafk` - Quick AFK setting
 
 ### Admin/Officer Commands
 - `/getmembers` - List role members
@@ -82,6 +83,37 @@ Command: `/myafk`
 - Shows your last 5 AFK entries
 - Includes active, scheduled, and past entries
 - Shows duration and early endings
+
+### Quick AFK Setting
+Command: `/quickafk`
+Parameters:
+- `reason` (required): Text explanation
+- `days` (optional): Number of days to be AFK
+
+Examples:
+```
+# AFK until end of today
+/quickafk reason:Quick meeting
+
+# AFK for specific number of days
+/quickafk reason:Short vacation days:3
+```
+
+Example Output:
+```
+✅ Quick AFK set for Username
+From: 24/12/2023 14:30 (UTC+1/CET)
+Until: 24/12/2023 23:59 (UTC+1/CET)
+Reason: Quick meeting
+```
+
+or with days specified:
+```
+✅ Quick AFK set for Username
+From: 24/12/2023 14:30 (UTC+1/CET)
+Until: 27/12/2023 23:59 (UTC+1/CET)
+Reason: Short vacation
+```
 
 ### Admin Commands
 

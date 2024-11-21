@@ -4,7 +4,7 @@ from discord.ext import commands
 import asyncio
 import aiohttp
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import TOKEN, ADMIN_ROLE_ID, OFFICER_ROLE_ID, DATABASE_FILE, CLAN1_ROLE_ID, CLAN2_ROLE_ID
 from database import Database
 import os
@@ -599,6 +599,78 @@ async def afkdelete(
 
     except Exception as e:
         await interaction.followup.send(
+            f"❌ An error occurred: {str(e)}",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="quickafk", description="Quickly set AFK status until end of day (or specified days)")
+@app_commands.describe(
+    days="Optional: Number of days to be AFK (default: until end of today)",
+    reason="Reason for being AFK"
+)
+async def quickafk(
+    interaction: discord.Interaction,
+    reason: str,
+    days: int = None
+):
+    try:
+        # Get current time as start
+        start_datetime = datetime.now()
+        
+        # Calculate end time (end of current day or specified days)
+        if days is None:
+            # Set to end of current day (23:59:59)
+            end_datetime = start_datetime.replace(hour=23, minute=59, second=59)
+        else:
+            if days <= 0:
+                await interaction.response.send_message(
+                    "❌ Number of days must be positive!",
+                    ephemeral=True
+                )
+                return
+                
+            # Add specified days and set to end of that day
+            end_datetime = (start_datetime + timedelta(days=days)).replace(hour=23, minute=59, second=59)
+
+        # Check if user has any clan role
+        user_roles = interaction.user.roles
+        clan_role_id = None
+        
+        if any(role.id == CLAN1_ROLE_ID for role in user_roles):
+            clan_role_id = CLAN1_ROLE_ID
+        elif any(role.id == CLAN2_ROLE_ID for role in user_roles):
+            clan_role_id = CLAN2_ROLE_ID
+            
+        if clan_role_id is None:
+            await interaction.response.send_message(
+                "❌ You must be a member of a clan to use this command!",
+                ephemeral=True
+            )
+            return
+
+        # Store AFK info in database
+        bot.db.set_afk(
+            user_id=interaction.user.id,
+            display_name=interaction.user.display_name,
+            start_date=start_datetime,
+            end_date=end_datetime,
+            reason=reason,
+            clan_role_id=clan_role_id
+        )
+        
+        # Format response message
+        formatted_start = start_datetime.strftime("%d/%m/%Y %H:%M")
+        formatted_end = end_datetime.strftime("%d/%m/%Y %H:%M")
+        
+        await interaction.response.send_message(
+            f"✅ Quick AFK set for {interaction.user.display_name}\n"
+            f"From: {formatted_start} (UTC+1/CET)\n"
+            f"Until: {formatted_end} (UTC+1/CET)\n"
+            f"Reason: {reason}"
+        )
+
+    except Exception as e:
+        await interaction.response.send_message(
             f"❌ An error occurred: {str(e)}",
             ephemeral=True
         )
