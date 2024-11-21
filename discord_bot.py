@@ -12,6 +12,70 @@ import os
 def clean_name(name):
     return name.replace(" ", "").lower()
 
+def parse_time(time_str: str) -> tuple[int, int]:
+    """Parse time string in various formats (HH:MM or HHMM)"""
+    clean_time = time_str.replace(':', '')
+    
+    if len(clean_time) != 4:
+        raise ValueError("Time must be in format: HHMM or HH:MM")
+    
+    try:
+        hour = int(clean_time[:2])
+        minute = int(clean_time[2:])
+        
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError("Invalid hour or minute")
+            
+        return hour, minute
+    except ValueError as e:
+        raise ValueError(f"Invalid time format: {str(e)}")
+
+def parse_date(date_str: str, time_str: str) -> datetime:
+    """Parse date string and time string into datetime object"""
+    current_date = datetime.now()
+    
+    clean_date = date_str.replace('.', '').replace('/', '')
+    if len(clean_date) != 4:
+        raise ValueError("Date must be in format: DDMM, DD/MM or DD.MM")
+    
+    try:
+        day = int(clean_date[:2])
+        month = int(clean_date[2:])
+        
+        if not (1 <= month <= 12 and 1 <= day <= 31):
+            raise ValueError("Invalid day or month")
+            
+        hour, minute = parse_time(time_str)
+        
+        # Start with current year
+        year = current_date.year
+        
+        # Create datetime object
+        date_time = datetime(year, month, day, hour, minute)
+        
+        # If date is in the past, add a year
+        if date_time < current_date:
+            date_time = datetime(year + 1, month, day, hour, minute)
+            
+        return date_time
+        
+    except ValueError as e:
+        raise ValueError(f"Invalid date or time format: {str(e)}")
+
+def discord_timestamp(dt: datetime, style: str = 'f') -> str:
+    """
+    Convert datetime to Discord timestamp format
+    Styles:
+    t: Short Time (16:20)
+    T: Long Time (16:20:30)
+    d: Short Date (20/04/2021)
+    D: Long Date (20 April 2021)
+    f: Short Date/Time (20 April 2021 16:20)
+    F: Long Date/Time (Tuesday, 20 April 2021 16:20)
+    R: Relative Time (2 months ago)
+    """
+    return f"<t:{int(dt.timestamp())}:{style}>"
+
 class MemberBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
@@ -171,55 +235,32 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
         else:
             await interaction.followup.send(f"An error occurred: {str(e)}")
 
-@bot.tree.command(name="afk", description="Set your AFK status (Time in UTC+1/CET)")
+@bot.tree.command(name="afk", description="Set your AFK status")
 @app_commands.describe(
-    start_date="Start date (DD/MM/YYYY)",
-    start_time="Start time in UTC+1/CET (HH:MM)",
-    end_date="End date (DD/MM/YYYY)",
-    end_time="End time in UTC+1/CET (HH:MM)",
+    start_date="Start date (DDMM, DD/MM or DD.MM)",
+    start_time="Start time (HHMM or HH:MM)",
+    end_date="End date (DDMM, DD/MM or DD.MM)",
+    end_time="End time (HHMM or HH:MM)",
     reason="Reason for being AFK"
 )
-async def afk(
-    interaction: discord.Interaction, 
-    start_date: str,
-    start_time: str,
-    end_date: str,
-    end_time: str,
-    reason: str
-):
+async def afk(interaction: discord.Interaction, start_date: str, start_time: str, end_date: str, end_time: str, reason: str):
     try:
-        # Parse start date/time
-        try:
-            start_datetime = datetime.strptime(f"{start_date} {start_time}", "%d/%m/%Y %H:%M")
-        except ValueError:
-            await interaction.response.send_message(
-                "❌ Invalid start date/time format!\n"
-                "Please use:\n"
-                "Date: DD/MM/YYYY\n"
-                "Time: HH:MM\n"
-                "Note: Time must be in UTC+1/CET timezone!",
-                ephemeral=True
-            )
-            return
-
-        # Parse end date/time
-        try:
-            end_datetime = datetime.strptime(f"{end_date} {end_time}", "%d/%m/%Y %H:%M")
-        except ValueError:
-            await interaction.response.send_message(
-                "❌ Invalid end date/time format!\n"
-                "Please use:\n"
-                "Date: DD/MM/YYYY\n"
-                "Time: HH:MM\n"
-                "Note: Time must be in UTC+1/CET timezone!",
-                ephemeral=True
-            )
-            return
-
-        # Get current time for validation
+        # Parse dates
+        start_datetime = parse_date(start_date, start_time)
+        end_datetime = parse_date(end_date, end_time)
         current_time = datetime.now()
 
-        # Validate time periods
+        # If end date is before start date, add a year to end date
+        if end_datetime < start_datetime:
+            end_datetime = datetime(
+                end_datetime.year + 1,
+                end_datetime.month,
+                end_datetime.day,
+                end_datetime.hour,
+                end_datetime.minute
+            )
+
+        # Validations
         if end_datetime <= current_time:
             await interaction.response.send_message(
                 "❌ The end date/time must be in the future!",
@@ -241,10 +282,9 @@ async def afk(
             )
             return
 
-        # Check if user has any clan role
+        # Check clan role
         user_roles = interaction.user.roles
         clan_role_id = None
-        
         if any(role.id == CLAN1_ROLE_ID for role in user_roles):
             clan_role_id = CLAN1_ROLE_ID
         elif any(role.id == CLAN2_ROLE_ID for role in user_roles):
@@ -267,22 +307,16 @@ async def afk(
             clan_role_id=clan_role_id
         )
         
-        # Format response message
-        formatted_start = start_datetime.strftime("%d/%m/%Y %H:%M")
-        formatted_end = end_datetime.strftime("%d/%m/%Y %H:%M")
-        
         await interaction.response.send_message(
             f"✅ Set AFK status for {interaction.user.display_name}\n"
-            f"From: {formatted_start} (UTC+1/CET)\n"
-            f"Until: {formatted_end} (UTC+1/CET)\n"
+            f"From: {discord_timestamp(start_datetime)}\n"
+            f"Until: {discord_timestamp(end_datetime)}\n"
             f"Reason: {reason}"
         )
-
+    except ValueError as e:
+        await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(
-            f"❌ An error occurred: {str(e)}",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
 
 @bot.tree.command(name="unafk", description="Remove your AFK status")
 async def unafk(interaction: discord.Interaction):
@@ -338,8 +372,8 @@ async def listafk(interaction: discord.Interaction):
                     status = "⚪"  # Not started yet
                 
                 formatted_msg += f"{status} **{display_name}**\n"
-                formatted_msg += f"From: {start_date.strftime('%d/%m/%Y %H:%M')} (UTC+1/CET)\n"
-                formatted_msg += f"Until: {end_date.strftime('%d/%m/%Y %H:%M')} (UTC+1/CET)\n"
+                formatted_msg += f"From: {discord_timestamp(start_date)} ({discord_timestamp(start_date, 'R')})\n"
+                formatted_msg += f"Until: {discord_timestamp(end_date)} ({discord_timestamp(end_date, 'R')})\n"
                 formatted_msg += f"Reason: {reason}\n\n"
             return formatted_msg
 
@@ -468,14 +502,14 @@ async def afkhistory(interaction: discord.Interaction, user: discord.Member):
                 status = "⚪"
             
             message += f"{status} **{clan_name}**\n"
-            message += f"Created: {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"From: {start_date.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"Until: {end_date.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"Created: {discord_timestamp(created_datetime)}\n"
+            message += f"From: {discord_timestamp(start_date)}\n"
+            message += f"Until: {discord_timestamp(end_date)}\n"
             message += f"Reason: {reason}\n"
             
             if ended_at:
                 ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
-                message += f"Ended early: {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+                message += f"Ended early: {discord_timestamp(ended_datetime)}\n"
             
             # Calculate duration
             planned_duration = end_date - start_date
@@ -547,13 +581,14 @@ async def myafk(interaction: discord.Interaction):
                 status = "⚪"
             
             message += f"{status} **{clan_name}**\n"
-            message += f"From: {start_date.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"Until: {end_date.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"Created: {discord_timestamp(created_datetime)}\n"
+            message += f"From: {discord_timestamp(start_date)}\n"
+            message += f"Until: {discord_timestamp(end_date)}\n"
             message += f"Reason: {reason}\n"
             
             if ended_at:
                 ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
-                message += f"Ended early: {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+                message += f"Ended early: {discord_timestamp(ended_datetime)}\n"
             
             message += "─────────────\n"
 
@@ -609,14 +644,10 @@ async def afkdelete(
 
 @bot.tree.command(name="quickafk", description="Quickly set AFK status until end of day (or specified days)")
 @app_commands.describe(
-    days="Optional: Number of days to be AFK (default: until end of today)",
-    reason="Reason for being AFK"
+    reason="Reason for being AFK",
+    days="Optional: Number of days to be AFK (default: until end of today)"
 )
-async def quickafk(
-    interaction: discord.Interaction,
-    reason: str,
-    days: int = None
-):
+async def quickafk(interaction: discord.Interaction, reason: str, days: int = None):
     try:
         # Get current time as start
         start_datetime = datetime.now()
@@ -662,22 +693,14 @@ async def quickafk(
             clan_role_id=clan_role_id
         )
         
-        # Format response message
-        formatted_start = start_datetime.strftime("%d/%m/%Y %H:%M")
-        formatted_end = end_datetime.strftime("%d/%m/%Y %H:%M")
-        
         await interaction.response.send_message(
             f"✅ Quick AFK set for {interaction.user.display_name}\n"
-            f"From: {formatted_start} (UTC+1/CET)\n"
-            f"Until: {formatted_end} (UTC+1/CET)\n"
+            f"From: {discord_timestamp(start_datetime)}\n"
+            f"Until: {discord_timestamp(end_datetime)}\n"
             f"Reason: {reason}"
         )
-
     except Exception as e:
-        await interaction.response.send_message(
-            f"❌ An error occurred: {str(e)}",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
 
 def run_bot():
     bot.run(TOKEN)
