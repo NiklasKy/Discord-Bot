@@ -173,12 +173,70 @@ async def checksignups(interaction: discord.Interaction, role: discord.Role, eve
 
 @bot.tree.command(name="afk", description="Set your AFK status (Time in UTC+1/CET)")
 @app_commands.describe(
-    date="Date until you're AFK (format: DD/MM/YYYY)",
-    time="Time until you're AFK in UTC+1/CET (format: HH:MM)",
+    start_date="Start date (DD/MM/YYYY or 'now')",
+    start_time="Start time in UTC+1/CET (HH:MM or 'now')",
+    end_date="End date (DD/MM/YYYY)",
+    end_time="End time in UTC+1/CET (HH:MM)",
     reason="Reason for being AFK"
 )
-async def afk(interaction: discord.Interaction, date: str, time: str, reason: str):
+async def afk(
+    interaction: discord.Interaction, 
+    start_date: str,
+    start_time: str,
+    end_date: str,
+    end_time: str,
+    reason: str
+):
     try:
+        # Get current time for 'now' option and validation
+        current_time = datetime.now()
+
+        # Parse start date/time
+        if start_date.lower() == 'now' or start_time.lower() == 'now':
+            start_datetime = current_time
+        else:
+            try:
+                start_datetime = datetime.strptime(f"{start_date} {start_time}", "%d/%m/%Y %H:%M")
+            except ValueError:
+                await interaction.response.send_message(
+                    "❌ Invalid start date/time format!\n"
+                    "Please use:\n"
+                    "Date: DD/MM/YYYY or 'now'\n"
+                    "Time: HH:MM or 'now'\n"
+                    "Note: Time must be in UTC+1/CET timezone!",
+                    ephemeral=True
+                )
+                return
+
+        # Parse end date/time
+        try:
+            end_datetime = datetime.strptime(f"{end_date} {end_time}", "%d/%m/%Y %H:%M")
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid end date/time format!\n"
+                "Please use:\n"
+                "Date: DD/MM/YYYY\n"
+                "Time: HH:MM\n"
+                "Note: Time must be in UTC+1/CET timezone!",
+                ephemeral=True
+            )
+            return
+
+        # Validate time periods
+        if end_datetime <= current_time:
+            await interaction.response.send_message(
+                "❌ The end date/time must be in the future!",
+                ephemeral=True
+            )
+            return
+
+        if end_datetime <= start_datetime:
+            await interaction.response.send_message(
+                "❌ The end date/time must be after the start date/time!",
+                ephemeral=True
+            )
+            return
+
         # Check if user has any clan role
         user_roles = interaction.user.roles
         clan_role_id = None
@@ -195,45 +253,24 @@ async def afk(interaction: discord.Interaction, date: str, time: str, reason: st
             )
             return
 
-        # Parse date and time
-        try:
-            until_datetime = datetime.strptime(f"{date} {time}", "%d/%m/%Y %H:%M")
-        except ValueError:
-            await interaction.response.send_message(
-                "❌ Invalid date/time format!\n"
-                "Please use:\n"
-                "Date: DD/MM/YYYY\n"
-                "Time: HH:MM\n"
-                "Note: Time must be in UTC+1/CET timezone!",
-                ephemeral=True
-            )
-            return
-
-        # Check if date is in the future
-        current_time = datetime.now()
-        if until_datetime <= current_time:
-            await interaction.response.send_message(
-                "❌ The AFK date must be in the future!",
-                ephemeral=True
-            )
-            return
-        
-        # Store AFK info in database with clan role
+        # Store AFK info in database
         bot.db.set_afk(
             user_id=interaction.user.id,
             display_name=interaction.user.display_name,
-            until_date=until_datetime,
+            start_date=start_datetime,
+            end_date=end_datetime,
             reason=reason,
             clan_role_id=clan_role_id
         )
         
         # Format response message
-        formatted_date = until_datetime.strftime("%d/%m/%Y")
-        formatted_time = until_datetime.strftime("%H:%M")
+        formatted_start = start_datetime.strftime("%d/%m/%Y %H:%M")
+        formatted_end = end_datetime.strftime("%d/%m/%Y %H:%M")
         
         await interaction.response.send_message(
             f"✅ Set AFK status for {interaction.user.display_name}\n"
-            f"Until: {formatted_date} {formatted_time} (UTC+1/CET)\n"
+            f"From: {formatted_start} (UTC+1/CET)\n"
+            f"Until: {formatted_end} (UTC+1/CET)\n"
             f"Reason: {reason}"
         )
 
@@ -285,13 +322,20 @@ async def listafk(interaction: discord.Interaction):
         def format_clan_afk_users(afk_users):
             formatted_msg = ""
             for user in afk_users:
-                user_id, display_name, until_date_str, reason, created_at = user
-                until_date = datetime.strptime(until_date_str, "%Y-%m-%d %H:%M:%S")
-                days_left = (until_date - current_time).days
-                status = "🔴" if days_left < 0 else "🟢"
+                user_id, display_name, start_date_str, end_date_str, reason, created_at = user
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d %H:%M:%S")
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d %H:%M:%S")
+                
+                # Determine status based on current time and dates
+                status = "🟢"
+                if end_date < current_time:
+                    status = "🔴"
+                elif start_date > current_time:
+                    status = "⚪"  # Not started yet
                 
                 formatted_msg += f"{status} **{display_name}**\n"
-                formatted_msg += f"Until: {until_date.strftime('%d/%m/%Y %H:%M')} (UTC+1/CET)\n"
+                formatted_msg += f"From: {start_date.strftime('%d/%m/%Y %H:%M')} (UTC+1/CET)\n"
+                formatted_msg += f"Until: {end_date.strftime('%d/%m/%Y %H:%M')} (UTC+1/CET)\n"
                 formatted_msg += f"Reason: {reason}\n\n"
             return formatted_msg
 
@@ -344,6 +388,7 @@ async def afkstats(interaction: discord.Interaction):
         await interaction.response.defer()
 
         message = "**AFK Statistics:**\n\n"
+        current_time = datetime.now()
 
         # Get stats for each clan
         clan_configs = [
@@ -354,17 +399,17 @@ async def afkstats(interaction: discord.Interaction):
         for clan_role_id, clan_name in clan_configs:
             stats = bot.db.get_afk_statistics(clan_role_id)
             if stats:
-                total_afk, unique_users, currently_active, avg_duration = stats
+                total_afk, unique_users, active_now, scheduled_future, avg_duration = stats
                 
                 message += f"__**{clan_name}:**__\n"
                 message += f"Total AFK entries: {total_afk}\n"
                 message += f"Unique users: {unique_users}\n"
-                message += f"Currently AFK: {currently_active}\n"
+                message += f"Currently AFK: {active_now}\n"
+                message += f"Scheduled for future: {scheduled_future}\n"
                 if avg_duration:
                     message += f"Average AFK duration: {avg_duration:.1f} days\n"
                 message += "\n"
 
-        # Send message
         await interaction.followup.send(message)
 
     except Exception as e:
@@ -379,7 +424,7 @@ async def afkstats(interaction: discord.Interaction):
                 ephemeral=True
             )
 
-@bot.tree.command(name="afkhistory", description="Show AFK history for a user (Admin/Officer only)")
+@bot.tree.command(name="afkhistory", description="Show AFK history for a user (Admin only)")
 @app_commands.describe(user="The user to check history for")
 @has_required_role()
 async def afkhistory(interaction: discord.Interaction, user: discord.Member):
@@ -398,29 +443,44 @@ async def afkhistory(interaction: discord.Interaction, user: discord.Member):
 
         # Create message
         message = f"**AFK History for {user.display_name}:**\n\n"
+        current_time = datetime.now()
         
         for entry in history:
-            # Unpack all values (including clan_role_id)
-            display_name, until_date, reason, created_at, ended_at, clan_role_id = entry
+            display_name, start_date_str, end_date_str, reason, created_at, ended_at, clan_role_id = entry
             
-            # Convert strings to datetime objects for better formatting
-            until_datetime = datetime.strptime(until_date, "%Y-%m-%d %H:%M:%S")
+            # Convert strings to datetime objects
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d %H:%M:%S")
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d %H:%M:%S")
             created_datetime = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
             
             # Determine clan name
             clan_name = "Requiem Sun" if clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
             
-            # Format each entry
-            message += f"**Clan:** {clan_name}\n"
-            message += f"**Set on:** {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"**Until:** {until_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"**Reason:** {reason}\n"
+            # Determine status
+            status = "🟢"
+            if end_date < current_time:
+                status = "🔴"
+            elif start_date > current_time:
+                status = "⚪"
+            
+            message += f"{status} **{clan_name}**\n"
+            message += f"Created: {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"From: {start_date.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"Until: {end_date.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"Reason: {reason}\n"
             
             if ended_at:
                 ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
-                message += f"**Ended:** {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            else:
-                message += "**Status:** Still active\n"
+                message += f"Ended early: {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
+            
+            # Calculate duration
+            planned_duration = end_date - start_date
+            message += f"Planned duration: {planned_duration.days} days, {planned_duration.seconds//3600} hours\n"
+            
+            if ended_at:
+                actual_end = ended_datetime if ended_datetime < end_date else end_date
+                actual_duration = actual_end - start_date
+                message += f"Actual duration: {actual_duration.days} days, {actual_duration.seconds//3600} hours\n"
             
             message += "─────────────\n"
 
@@ -462,28 +522,34 @@ async def myafk(interaction: discord.Interaction):
 
         # Create message
         message = "**Your AFK History:**\n\n"
+        current_time = datetime.now()
         
         for entry in history:
-            # Unpack all values (including clan_role_id)
-            display_name, until_date, reason, created_at, ended_at, clan_role_id = entry
+            display_name, start_date_str, end_date_str, reason, created_at, ended_at, clan_role_id = entry
             
-            # Convert strings to datetime objects for better formatting
-            until_datetime = datetime.strptime(until_date, "%Y-%m-%d %H:%M:%S")
+            # Convert strings to datetime objects
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d %H:%M:%S")
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d %H:%M:%S")
             created_datetime = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
             
             # Determine clan name
             clan_name = "Requiem Sun" if clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
             
-            message += f"**Clan:** {clan_name}\n"
-            message += f"**Set on:** {created_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"**Until:** {until_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            message += f"**Reason:** {reason}\n"
+            # Determine status
+            status = "🟢"
+            if end_date < current_time:
+                status = "🔴"
+            elif start_date > current_time:
+                status = "⚪"
+            
+            message += f"{status} **{clan_name}**\n"
+            message += f"From: {start_date.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"Until: {end_date.strftime('%d/%m/%Y %H:%M')}\n"
+            message += f"Reason: {reason}\n"
             
             if ended_at:
                 ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
-                message += f"**Ended:** {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
-            else:
-                message += "**Status:** Still active\n"
+                message += f"Ended early: {ended_datetime.strftime('%d/%m/%Y %H:%M')}\n"
             
             message += "─────────────\n"
 

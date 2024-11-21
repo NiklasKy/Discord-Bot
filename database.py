@@ -22,22 +22,17 @@ class Database:
     def init_database(self):
         """Initialize the database and create tables if they don't exist"""
         try:
-            # Ensure the directory exists
-            db_dir = os.path.dirname(os.path.abspath(self.db_file))
-            if not os.path.exists(db_dir):
-                os.makedirs(db_dir)
-                logging.info(f"Created directory: {db_dir}")
-
             with sqlite3.connect(self.db_file) as conn:
                 cursor = conn.cursor()
                 
-                # Create AFK users table with clan information
+                # Create AFK users table with start and end times
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS afk_users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER NOT NULL,
                         display_name TEXT NOT NULL,
-                        until_date TEXT NOT NULL,
+                        start_date TEXT NOT NULL,
+                        end_date TEXT NOT NULL,
                         reason TEXT,
                         clan_role_id INTEGER NOT NULL,
                         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -62,11 +57,8 @@ class Database:
         except sqlite3.Error as e:
             logging.error(f"SQLite error during initialization: {e}")
             raise
-        except Exception as e:
-            logging.error(f"Unexpected error during database initialization: {e}")
-            raise
 
-    def set_afk(self, user_id: int, display_name: str, until_date: datetime, reason: str, clan_role_id: int):
+    def set_afk(self, user_id: int, display_name: str, start_date: datetime, end_date: datetime, reason: str, clan_role_id: int):
         """Set a user as AFK"""
         self.deactivate_previous_afk(user_id)
         
@@ -74,9 +66,16 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO afk_users 
-                (user_id, display_name, until_date, reason, clan_role_id, is_active)
-                VALUES (?, ?, ?, ?, ?, 1)
-            ''', (user_id, display_name, until_date.strftime("%Y-%m-%d %H:%M:%S"), reason, clan_role_id))
+                (user_id, display_name, start_date, end_date, reason, clan_role_id, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
+            ''', (
+                user_id, 
+                display_name, 
+                start_date.strftime("%Y-%m-%d %H:%M:%S"),
+                end_date.strftime("%Y-%m-%d %H:%M:%S"),
+                reason,
+                clan_role_id
+            ))
             conn.commit()
 
     def deactivate_previous_afk(self, user_id: int):
@@ -108,23 +107,59 @@ class Database:
 
     def get_all_active_afk(self, clan_role_id: int = None):
         """Get all active AFK users, optionally filtered by clan"""
-        with sqlite3.connect(self.db_file) as conn:
-            cursor = conn.cursor()
-            if clan_role_id is not None:
-                cursor.execute('''
-                    SELECT user_id, display_name, until_date, reason, created_at 
-                    FROM afk_users 
-                    WHERE is_active = 1 AND clan_role_id = ?
-                    ORDER BY until_date ASC
-                ''', (clan_role_id,))
-            else:
-                cursor.execute('''
-                    SELECT user_id, display_name, until_date, reason, created_at 
-                    FROM afk_users 
-                    WHERE is_active = 1 
-                    ORDER BY until_date ASC
-                ''')
-            return cursor.fetchall()
+        current_time = datetime.now()
+        
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                if clan_role_id is not None:
+                    cursor.execute('''
+                        SELECT 
+                            user_id, 
+                            display_name, 
+                            start_date,
+                            end_date, 
+                            reason, 
+                            created_at 
+                        FROM afk_users 
+                        WHERE is_active = 1 
+                        AND clan_role_id = ?
+                        AND (
+                            (start_date <= ? AND end_date > ?) 
+                            OR start_date > ?
+                        )
+                        ORDER BY start_date ASC
+                    ''', (
+                        clan_role_id,
+                        current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        current_time.strftime("%Y-%m-%d %H:%M:%S")
+                    ))
+                else:
+                    cursor.execute('''
+                        SELECT 
+                            user_id, 
+                            display_name, 
+                            start_date,
+                            end_date, 
+                            reason, 
+                            created_at 
+                        FROM afk_users 
+                        WHERE is_active = 1 
+                        AND (
+                            (start_date <= ? AND end_date > ?) 
+                            OR start_date > ?
+                        )
+                        ORDER BY start_date ASC
+                    ''', (
+                        current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        current_time.strftime("%Y-%m-%d %H:%M:%S")
+                    ))
+                return cursor.fetchall()
+        except sqlite3.Error as e:
+            logging.error(f"Error getting active AFK users: {e}")
+            raise
 
     def get_user_afk_history(self, user_id: int, limit: int = 5):
         """Get AFK history for a specific user"""
@@ -134,7 +169,8 @@ class Database:
                 cursor.execute('''
                     SELECT 
                         display_name, 
-                        until_date, 
+                        start_date,
+                        end_date, 
                         reason, 
                         created_at, 
                         ended_at,
@@ -151,6 +187,8 @@ class Database:
 
     def get_afk_statistics(self, clan_role_id: int = None):
         """Get AFK statistics for a specific clan"""
+        current_time = datetime.now()
+        
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             
@@ -159,28 +197,63 @@ class Database:
                     SELECT 
                         COUNT(*) as total_afk,
                         COUNT(DISTINCT user_id) as unique_users,
-                        COUNT(CASE WHEN is_active = 1 THEN 1 END) as currently_active,
+                        COUNT(CASE 
+                            WHEN is_active = 1 
+                            AND start_date <= ? 
+                            AND end_date > ? 
+                            THEN 1 
+                        END) as active_now,
+                        COUNT(CASE 
+                            WHEN is_active = 1 
+                            AND start_date > ? 
+                            THEN 1 
+                        END) as scheduled_future,
                         AVG(CASE 
                             WHEN ended_at IS NOT NULL 
-                            THEN julianday(ended_at) - julianday(created_at) 
-                            END) as avg_duration_days
+                            THEN julianday(COALESCE(ended_at, end_date)) - julianday(start_date)
+                            WHEN end_date < ?
+                            THEN julianday(end_date) - julianday(start_date)
+                        END) as avg_duration_days
                     FROM afk_users
                     WHERE clan_role_id = ?
-                ''', (clan_role_id,))
+                ''', (
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    clan_role_id
+                ))
             else:
                 cursor.execute('''
                     SELECT 
                         COUNT(*) as total_afk,
                         COUNT(DISTINCT user_id) as unique_users,
-                        COUNT(CASE WHEN is_active = 1 THEN 1 END) as currently_active,
+                        COUNT(CASE 
+                            WHEN is_active = 1 
+                            AND start_date <= ? 
+                            AND end_date > ? 
+                            THEN 1 
+                        END) as active_now,
+                        COUNT(CASE 
+                            WHEN is_active = 1 
+                            AND start_date > ? 
+                            THEN 1 
+                        END) as scheduled_future,
                         AVG(CASE 
                             WHEN ended_at IS NOT NULL 
-                            THEN julianday(ended_at) - julianday(created_at) 
-                            END) as avg_duration_days
+                            THEN julianday(COALESCE(ended_at, end_date)) - julianday(start_date)
+                            WHEN end_date < ?
+                            THEN julianday(end_date) - julianday(start_date)
+                        END) as avg_duration_days
                     FROM afk_users
-                ''')
+                ''', (
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    current_time.strftime("%Y-%m-%d %H:%M:%S")
+                ))
             
-            return cursor.fetchone() 
+            return cursor.fetchone()
 
     def delete_afk_entries(self, user_id: int, all_entries: bool = False) -> int:
         """

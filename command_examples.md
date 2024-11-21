@@ -3,7 +3,7 @@
 ## Command Overview
 
 ### User Commands
-- `/afk` - Set AFK status
+- `/afk` - Set AFK status with start and end time
 - `/unafk` - Remove AFK status
 - `/listafk` - View AFK list for your clan
 - `/myafk` - View personal AFK history
@@ -22,21 +22,24 @@
 #### Setting AFK Status
 Command: `/afk`
 Parameters:
-- `date` (required): DD/MM/YYYY
-- `time` (required): HH:MM (24h format, UTC+1/CET)
+- `start_date` (required): DD/MM/YYYY or 'now'
+- `start_time` (required): HH:MM or 'now'
+- `end_date` (required): DD/MM/YYYY
+- `end_time` (required): HH:MM
 - `reason` (required): Text explanation
 
 Examples:
 ```
-/afk date:31/12/2023 time:23:59 reason:New Year's Eve
-/afk date:24/12/2023 time:18:00 reason:Christmas Holiday
-/afk date:01/01/2024 time:12:00 reason:Recovery Day
+/afk start_date:now start_time:now end_date:31/12/2023 end_time:23:59 reason:New Year's Eve
+/afk start_date:24/12/2023 start_time:18:00 end_date:26/12/2023 end_time:10:00 reason:Christmas Holiday
+/afk start_date:01/01/2024 start_time:00:01 end_date:02/01/2024 end_time:12:00 reason:Recovery Day
 ```
 
 #### Remove AFK Status
 Command: `/unafk`
 - Removes your current AFK status
 - Updates history automatically
+- Marks end time as current time
 
 Example:
 ```
@@ -47,24 +50,38 @@ Example:
 Command: `/listafk`
 - Shows AFK players from your clan
 - Admins see both clans separately
+- Shows current, future, and recently expired AFKs
 
 Example Output:
 ```
 **Currently AFK Users (Requiem Sun):**
 
 🟢 **PlayerName**
-Until: 31/12/2023 23:59 (UTC+1/CET)
+From: 24/12/2023 18:00 (UTC+1/CET)
+Until: 26/12/2023 10:00 (UTC+1/CET)
+Reason: Christmas Holiday
+
+⚪ **FuturePlayer**
+From: 31/12/2023 23:59 (UTC+1/CET)
+Until: 01/01/2024 12:00 (UTC+1/CET)
 Reason: New Year's Eve
 
-🔴 **AnotherPlayer**
-Until: 24/12/2023 18:00 (UTC+1/CET)
-Reason: Christmas Holiday
+🔴 **ExpiredPlayer**
+From: 20/12/2023 10:00 (UTC+1/CET)
+Until: 22/12/2023 18:00 (UTC+1/CET)
+Reason: Work Trip
 ```
+
+Status Indicators:
+- 🟢 Currently AFK
+- ⚪ Scheduled for future
+- 🔴 Expired/Ended
 
 #### View Personal History
 Command: `/myafk`
 - Shows your last 5 AFK entries
-- Includes active and past entries
+- Includes active, scheduled, and past entries
+- Shows duration and early endings
 
 ### Admin Commands
 
@@ -118,12 +135,14 @@ __**Requiem Sun:**__
 Total AFK entries: 15
 Unique users: 8
 Currently AFK: 3
+Scheduled for future: 2
 Average AFK duration: 5.2 days
 
 __**Requiem Moon:**__
 Total AFK entries: 10
 Unique users: 6
 Currently AFK: 2
+Scheduled for future: 1
 Average AFK duration: 4.8 days
 ```
 
@@ -135,6 +154,28 @@ Parameters:
 Example:
 ```
 /afkhistory user:@Username
+```
+
+Example Output:
+```
+**AFK History for Username:**
+
+🟢 **Requiem Sun**
+Created: 24/12/2023 17:45
+From: 24/12/2023 18:00
+Until: 26/12/2023 10:00
+Reason: Christmas Holiday
+Planned duration: 1 days, 16 hours
+─────────────
+🔴 **Requiem Sun**
+Created: 20/12/2023 09:45
+From: 20/12/2023 10:00
+Until: 22/12/2023 18:00
+Reason: Work Trip
+Ended early: 21/12/2023 20:00
+Planned duration: 2 days, 8 hours
+Actual duration: 1 day, 10 hours
+─────────────
 ```
 
 #### Delete AFK Entries
@@ -149,11 +190,6 @@ Examples:
 /afkdelete user:@Username all_entries:True
 ```
 
-## Status Indicators
-
-- 🟢 Active AFK status
-- 🔴 Expired AFK status
-
 ## Common Errors and Solutions
 
 ### Invalid Date Format
@@ -161,8 +197,12 @@ Error: "Invalid date/time format!"
 Solution: Use DD/MM/YYYY format for date and HH:MM for time (UTC+1/CET)
 
 ### Past Date
-Error: "The AFK date must be in the future!"
-Solution: Ensure the date and time are set in the future
+Error: "The end date/time must be in the future!"
+Solution: Ensure the end date and time are set in the future
+
+### Invalid Time Order
+Error: "The end date/time must be after the start date/time!"
+Solution: Ensure start time is before end time
 
 ### Permission Denied
 Error: "You don't have permission to use this command!"
@@ -176,15 +216,18 @@ Solution: Check if the event ID is correct and the event exists
 
 1. **Setting AFK Status**
    - Use clear, concise reasons
-   - Set accurate return dates
+   - Set accurate start and end times
+   - Use 'now' for immediate starts
    - Update status if plans change
 
 2. **Admin Commands**
    - Double-check before deleting entries
    - Regularly check AFK statistics
    - Monitor signup compliance
+   - Review AFK history for patterns
 
 3. **General Usage**
    - Keep reasons professional
    - Remove AFK status when returning early
    - Report any issues to admins
+   - Use appropriate time zones (UTC+1/CET)
