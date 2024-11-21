@@ -23,19 +23,53 @@
 #### Setting AFK Status
 Command: `/afk`
 Parameters:
-- `start_date` (required): DD/MM/YYYY
-- `start_time` (required): HH:MM
-- `end_date` (required): DD/MM/YYYY
-- `end_time` (required): HH:MM
+- `start_date` (required): DDMM, DD/MM or DD.MM
+- `start_time` (required): HHMM or HH:MM
+- `end_date` (required): DDMM, DD/MM or DD.MM
+- `end_time` (required): HHMM or HH:MM
 - `reason` (required): Text explanation
 
 Examples:
 ```
-/afk start_date:24/12/2023 start_time:18:00 end_date:26/12/2023 end_time:10:00 reason:Christmas Holiday
-/afk start_date:31/12/2023 start_time:20:00 end_date:01/01/2024 end_time:12:00 reason:New Year's Eve
+/afk start_date:1109 start_time:1254 end_date:1212 end_time:1208 reason:Holiday
+/afk start_date:11.09 start_time:12:54 end_date:12/12 end_time:12:08 reason:Holiday
 ```
 
-Note: All times must be in UTC+1/CET timezone and cannot be in the past.
+Note: 
+- Dates in the past will automatically be set to next year
+- If end date is before start date in the same year, end date will be set to next year
+- All times are converted to local time zone for each user
+
+Example Output:
+```
+✅ Set AFK status for Username
+From: <t:1757588040:f>
+Until: <t:1765699680:f>
+Reason: Holiday
+```
+
+#### Quick AFK Setting
+Command: `/quickafk`
+Parameters:
+- `reason` (required): Text explanation
+- `days` (optional): Number of days to be AFK
+
+Examples:
+```
+# AFK until end of today
+/quickafk reason:Quick meeting
+
+# AFK for specific number of days
+/quickafk reason:Short vacation days:3
+```
+
+Example Output:
+```
+✅ Quick AFK set for Username
+From: <t:1703163000:f>
+Until: <t:1703199540:f>
+Reason: Quick meeting
+```
 
 #### Remove AFK Status
 Command: `/unafk`
@@ -264,3 +298,26 @@ Solution: Check if the event ID is correct and the event exists
    - Remove AFK status when returning early
    - Report any issues to admins
    - Use appropriate time zones (UTC+1/CET)
+
+## Date and Time Formats
+
+### Valid Date Formats
+- `DDMM` - e.g., 1109 for September 11th
+- `DD.MM` - e.g., 11.09 for September 11th
+- `DD/MM` - e.g., 11/09 for September 11th
+
+### Valid Time Formats
+- `HHMM` - e.g., 1254 for 12:54
+- `HH:MM` - e.g., 12:54 for 12:54
+
+### Automatic Year Handling
+- Current date: December 21, 2023
+- Input: 11.09 → September 11, 2024 (past date → next year)
+- Input: 24.12 → December 24, 2023 (future date → current year)
+- Input: Start 11.09, End 12.12 → Sept 11, 2024 - Dec 12, 2024 (same year)
+- Input: Start 12.12, End 11.01 → Dec 12, 2024 - Jan 11, 2025 (end date next year)
+
+### Time Zones
+- All times are stored in UTC
+- Discord automatically converts times to each user's local time zone
+- Times are displayed using Discord's timestamp format (<t:timestamp:f>)

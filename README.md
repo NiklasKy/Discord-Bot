@@ -13,10 +13,12 @@ This bot helps manage two World of Warcraft guilds (Requiem Sun and Requiem Moon
 - Export member lists
 
 ### AFK System
-- Set and manage AFK status
+- Set AFK status with flexible date/time formats
+- Automatic year calculation for dates
 - Clan-specific AFK tracking
 - AFK history and statistics
 - Admin management tools
+- Time zone support through Discord timestamps
 
 ## Technical Requirements
 
@@ -27,7 +29,6 @@ This bot helps manage two World of Warcraft guilds (Requiem Sun and Requiem Moon
 - Git (for updates)
 
 ### Python Packages
-- bash
 - discord.py>=2.0.0
 - aiohttp>=3.8.0
 - python-dotenv>=0.19.0
@@ -79,8 +80,9 @@ ProjectRoot/
 ## Features
 
 ### AFK Management
-- Set AFK status with date, time, and reason
-- Automatic timezone handling (UTC+1/CET)
+- Flexible date/time input formats (DDMM, DD.MM, DD/MM, HHMM, HH:MM)
+- Automatic year calculation for dates
+- Time zone support through Discord timestamps
 - Clan-specific AFK lists
 - Personal AFK history tracking
 - Admin tools for AFK management
@@ -96,6 +98,22 @@ ProjectRoot/
 - User history viewing
 - Data management tools
 - Role-based access control
+
+## Date and Time Handling
+
+### Date Formats
+- DDMM (e.g., 1109)
+- DD.MM (e.g., 11.09)
+- DD/MM (e.g., 11/09)
+
+### Time Formats
+- HHMM (e.g., 1254)
+- HH:MM (e.g., 12:54)
+
+### Automatic Year Calculation
+- Past dates automatically set to next year
+- Smart handling of date ranges across year boundaries
+- All times stored in UTC and displayed in user's local time zone
 
 ## Database
 - SQLite database for reliable data storage
@@ -148,8 +166,10 @@ For technical support or questions:
 2. Review error logs
 3. Contact system administrator
 
-## Time Zone
-All bot operations use UTC+1/CET timezone
+## Time Zone Handling
+- All times stored in UTC
+- Discord automatically converts to user's local time zone
+- Uses Discord's built-in timestamp system
 
 ## Notes
 - Regular backups recommended
