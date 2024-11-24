@@ -292,3 +292,29 @@ class Database:
         except sqlite3.Error as e:
             logging.error(f"Error deleting AFK entries: {e}")
             raise 
+
+    def get_user_active_afk(self, user_id: int):
+        """Get current and future AFK entries for a user"""
+        current_time = datetime.now()
+        
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT 
+                        display_name, 
+                        start_date,
+                        end_date, 
+                        reason,
+                        created_at,
+                        clan_role_id
+                    FROM afk_users 
+                    WHERE user_id = ? 
+                    AND is_active = 1
+                    AND end_date >= ?
+                    ORDER BY start_date ASC
+                ''', (user_id, current_time.strftime("%Y-%m-%d %H:%M:%S")))
+                return cursor.fetchall()
+        except sqlite3.Error as e:
+            logging.error(f"Error getting user active AFK entries: {e}")
+            raise

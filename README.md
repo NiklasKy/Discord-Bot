@@ -15,6 +15,7 @@ This bot helps manage two World of Warcraft guilds (Requiem Sun and Requiem Moon
 ### AFK System
 - Set AFK status with flexible date/time formats
 - Automatic year calculation for dates
+- View current and future AFK status
 - Clan-specific AFK tracking
 - AFK history and statistics
 - Admin management tools
@@ -82,6 +83,7 @@ ProjectRoot/
 ### AFK Management
 - Flexible date/time input formats (DDMM, DD.MM, DD/MM, HHMM, HH:MM)
 - Automatic year calculation for dates
+- View current and upcoming AFK status
 - Time zone support through Discord timestamps
 - Clan-specific AFK lists
 - Personal AFK history tracking
@@ -113,7 +115,8 @@ ProjectRoot/
 ### Automatic Year Calculation
 - Past dates automatically set to next year
 - Smart handling of date ranges across year boundaries
-- All times stored in UTC and displayed in user's local time zone
+- All times displayed using Discord timestamps
+- Automatic timezone conversion for each user
 
 ## Database
 - SQLite database for reliable data storage
@@ -169,7 +172,8 @@ For technical support or questions:
 ## Time Zone Handling
 - All times stored in UTC
 - Discord automatically converts to user's local time zone
-- Uses Discord's built-in timestamp system
+- Uses Discord's built-in timestamp system (<t:timestamp:f>)
+- Relative time indicators available in certain commands
 
 ## Notes
 - Regular backups recommended

@@ -309,8 +309,8 @@ async def afk(interaction: discord.Interaction, start_date: str, start_time: str
         
         await interaction.response.send_message(
             f"✅ Set AFK status for {interaction.user.display_name}\n"
-            f"From: {discord_timestamp(start_datetime)}\n"
-            f"Until: {discord_timestamp(end_datetime)}\n"
+            f"From: <t:{int(start_datetime.timestamp())}:f>\n"
+            f"Until: <t:{int(end_datetime.timestamp())}:f>\n"
             f"Reason: {reason}"
         )
     except ValueError as e:
@@ -372,8 +372,8 @@ async def listafk(interaction: discord.Interaction):
                     status = "⚪"  # Not started yet
                 
                 formatted_msg += f"{status} **{display_name}**\n"
-                formatted_msg += f"From: {discord_timestamp(start_date)} ({discord_timestamp(start_date, 'R')})\n"
-                formatted_msg += f"Until: {discord_timestamp(end_date)} ({discord_timestamp(end_date, 'R')})\n"
+                formatted_msg += f"From: <t:{int(start_date.timestamp())}:f> (<t:{int(start_date.timestamp())}:R>)\n"
+                formatted_msg += f"Until: <t:{int(end_date.timestamp())}:f> (<t:{int(end_date.timestamp())}:R>)\n"
                 formatted_msg += f"Reason: {reason}\n\n"
             return formatted_msg
 
@@ -502,14 +502,14 @@ async def afkhistory(interaction: discord.Interaction, user: discord.Member):
                 status = "⚪"
             
             message += f"{status} **{clan_name}**\n"
-            message += f"Created: {discord_timestamp(created_datetime)}\n"
-            message += f"From: {discord_timestamp(start_date)}\n"
-            message += f"Until: {discord_timestamp(end_date)}\n"
+            message += f"Created: <t:{int(created_datetime.timestamp())}:f>\n"
+            message += f"From: <t:{int(start_date.timestamp())}:f>\n"
+            message += f"Until: <t:{int(end_date.timestamp())}:f>\n"
             message += f"Reason: {reason}\n"
             
             if ended_at:
                 ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
-                message += f"Ended early: {discord_timestamp(ended_datetime)}\n"
+                message += f"Ended early: <t:{int(ended_datetime.timestamp())}:f>\n"
             
             # Calculate duration
             planned_duration = end_date - start_date
@@ -545,63 +545,48 @@ async def afkhistory(interaction: discord.Interaction, user: discord.Member):
                 ephemeral=True
             )
 
-@bot.tree.command(name="myafk", description="Show your personal AFK history")
+@bot.tree.command(name="myafk", description="Show your current and future AFK status")
 async def myafk(interaction: discord.Interaction):
     try:
-        # Get user's AFK history from database
-        history = bot.db.get_user_afk_history(interaction.user.id)
+        # Get current time for comparison
+        current_time = datetime.now()
         
-        if not history:
+        # Get user's AFK entries from database
+        afk_entries = bot.db.get_user_active_afk(interaction.user.id)
+        
+        if not afk_entries:
             await interaction.response.send_message(
-                "You have no AFK history.",
+                "You have no current or future AFK entries.",
                 ephemeral=True
             )
             return
 
         # Create message
-        message = "**Your AFK History:**\n\n"
-        current_time = datetime.now()
+        message = "**Your AFK Status:**\n\n"
         
-        for entry in history:
-            display_name, start_date_str, end_date_str, reason, created_at, ended_at, clan_role_id = entry
+        for entry in afk_entries:
+            display_name, start_date_str, end_date_str, reason, created_at, clan_role_id = entry
             
-            # Convert strings to datetime objects
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d %H:%M:%S")
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d %H:%M:%S")
-            created_datetime = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
-            
-            # Determine clan name
-            clan_name = "Requiem Sun" if clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
             
             # Determine status
-            status = "🟢"
+            status = "🟢"  # Current
             if end_date < current_time:
-                status = "🔴"
+                status = "🔴"  # Expired
             elif start_date > current_time:
-                status = "⚪"
+                status = "⚪"  # Future
+            
+            # Get clan name
+            clan_name = "Requiem Sun" if clan_role_id == CLAN1_ROLE_ID else "Requiem Moon"
             
             message += f"{status} **{clan_name}**\n"
-            message += f"Created: {discord_timestamp(created_datetime)}\n"
-            message += f"From: {discord_timestamp(start_date)}\n"
-            message += f"Until: {discord_timestamp(end_date)}\n"
+            message += f"From: <t:{int(start_date.timestamp())}:f>\n"
+            message += f"Until: <t:{int(end_date.timestamp())}:f>\n"
             message += f"Reason: {reason}\n"
-            
-            if ended_at:
-                ended_datetime = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
-                message += f"Ended early: {discord_timestamp(ended_datetime)}\n"
-            
             message += "─────────────\n"
 
-        # Send message (split if too long)
-        if len(message) > 2000:
-            chunks = [message[i:i+1900] for i in range(0, len(message), 1900)]
-            for i, chunk in enumerate(chunks):
-                if i == 0:
-                    await interaction.response.send_message(chunk)
-                else:
-                    await interaction.followup.send(chunk)
-        else:
-            await interaction.response.send_message(message)
+        await interaction.response.send_message(message)
 
     except Exception as e:
         await interaction.response.send_message(
@@ -695,8 +680,8 @@ async def quickafk(interaction: discord.Interaction, reason: str, days: int = No
         
         await interaction.response.send_message(
             f"✅ Quick AFK set for {interaction.user.display_name}\n"
-            f"From: {discord_timestamp(start_datetime)}\n"
-            f"Until: {discord_timestamp(end_datetime)}\n"
+            f"From: <t:{int(start_datetime.timestamp())}:f>\n"
+            f"Until: <t:{int(end_datetime.timestamp())}:f>\n"
             f"Reason: {reason}"
         )
     except Exception as e:

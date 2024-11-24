@@ -6,7 +6,7 @@
 - `/afk` - Set AFK status with start and end time
 - `/unafk` - Remove AFK status
 - `/listafk` - View AFK list for your clan
-- `/myafk` - View personal AFK history
+- `/myafk` - View your current and future AFK status
 - `/quickafk` - Quick AFK setting
 
 ### Admin/Officer Commands
@@ -38,7 +38,7 @@ Examples:
 Note: 
 - Dates in the past will automatically be set to next year
 - If end date is before start date in the same year, end date will be set to next year
-- All times are converted to local time zone for each user
+- All times are shown in your local timezone
 
 Example Output:
 ```
@@ -71,6 +71,52 @@ Until: <t:1703199540:f>
 Reason: Quick meeting
 ```
 
+#### View Current and Future AFK Status
+Command: `/myafk`
+- Shows your current and upcoming AFK entries
+- No parameters required
+
+Example Output:
+```
+**Your AFK Status:**
+
+🟢 **Requiem Sun**
+From: <t:1703426400:f>
+Until: <t:1703599200:f>
+Reason: Holiday
+─────────────
+⚪ **Requiem Sun**
+From: <t:1704031200:f>
+Until: <t:1704135600:f>
+Reason: New Year's Eve
+─────────────
+```
+
+#### View AFK List
+Command: `/listafk`
+- Shows AFK players from your clan
+- Admins see both clans separately
+
+Example Output:
+```
+**Currently AFK Users (Requiem Sun):**
+
+🟢 **PlayerName**
+From: <t:1703426400:f> (<t:1703426400:R>)
+Until: <t:1703599200:f> (<t:1703599200:R>)
+Reason: Holiday
+
+⚪ **FuturePlayer**
+From: <t:1704031200:f> (<t:1704031200:R>)
+Until: <t:1704135600:f> (<t:1704135600:R>)
+Reason: New Year's Eve
+```
+
+Status Indicators:
+- 🟢 Currently AFK
+- ⚪ Scheduled for future
+- 🔴 Recently expired/Ended
+
 #### Remove AFK Status
 Command: `/unafk`
 - Removes your current AFK status
@@ -81,43 +127,6 @@ Example:
 ```
 /unafk
 ```
-
-#### View AFK List
-Command: `/listafk`
-- Shows AFK players from your clan
-- Admins see both clans separately
-- Shows current, future, and recently expired AFKs
-
-Example Output:
-```
-**Currently AFK Users (Requiem Sun):**
-
-🟢 **PlayerName**
-From: 24/12/2023 18:00 (UTC+1/CET)
-Until: 26/12/2023 10:00 (UTC+1/CET)
-Reason: Christmas Holiday
-
-⚪ **FuturePlayer**
-From: 31/12/2023 23:59 (UTC+1/CET)
-Until: 01/01/2024 12:00 (UTC+1/CET)
-Reason: New Year's Eve
-
-🔴 **ExpiredPlayer**
-From: 20/12/2023 10:00 (UTC+1/CET)
-Until: 22/12/2023 18:00 (UTC+1/CET)
-Reason: Work Trip
-```
-
-Status Indicators:
-- 🟢 Currently AFK
-- ⚪ Scheduled for future
-- 🔴 Expired/Ended
-
-#### View Personal History
-Command: `/myafk`
-- Shows your last 5 AFK entries
-- Includes active, scheduled, and past entries
-- Shows duration and early endings
 
 ### Quick AFK Setting
 Command: `/quickafk`
@@ -299,25 +308,23 @@ Solution: Check if the event ID is correct and the event exists
    - Report any issues to admins
    - Use appropriate time zones (UTC+1/CET)
 
-## Date and Time Formats
+## Time Format Information
 
-### Valid Date Formats
+### Date Input Formats
 - `DDMM` - e.g., 1109 for September 11th
 - `DD.MM` - e.g., 11.09 for September 11th
 - `DD/MM` - e.g., 11/09 for September 11th
 
-### Valid Time Formats
+### Time Input Formats
 - `HHMM` - e.g., 1254 for 12:54
 - `HH:MM` - e.g., 12:54 for 12:54
 
-### Automatic Year Handling
-- Current date: December 21, 2023
-- Input: 11.09 → September 11, 2024 (past date → next year)
-- Input: 24.12 → December 24, 2023 (future date → current year)
-- Input: Start 11.09, End 12.12 → Sept 11, 2024 - Dec 12, 2024 (same year)
-- Input: Start 12.12, End 11.01 → Dec 12, 2024 - Jan 11, 2025 (end date next year)
+### Time Display
+- All times are displayed using Discord's timestamp format (<t:timestamp:f>)
+- Times are automatically converted to each user's local timezone
+- Relative time indicators (e.g., "in 2 days") are shown in listafk command
 
-### Time Zones
-- All times are stored in UTC
-- Discord automatically converts times to each user's local time zone
-- Times are displayed using Discord's timestamp format (<t:timestamp:f>)
+### Automatic Year Handling
+- Past dates are automatically set to next year
+- If end date is before start date in the same year, end date is set to next year
+- System automatically handles year transitions
